@@ -100,6 +100,7 @@ fun WoWForeverScreen(
     var gamePath by remember { mutableStateOf(GamePath.load(context)) }
     var files by remember { mutableStateOf(GamePath.Status()) }
     var isLaunching by remember { mutableStateOf(false) }
+    var driverSettingsOpen by remember { mutableStateOf(false) }
     var launchJob by remember { mutableStateOf<Job?>(null) }
     var statusText by remember { mutableStateOf(READY_STATUS) }
     var isHarvesting by remember {
@@ -286,6 +287,7 @@ fun WoWForeverScreen(
 
     /** [by] = who launches ("play": the bottom's Play / auto-launch, "restart": the restart's own) - the restart's log names it */
     fun launchGame(by: String = "play") {
+        if (driverSettingsOpen) return
         val restart = com.jrees.wowcompanion.SetupBridge.restarting
         fun refused(why: String) {
             if (restart) com.jrees.wowcompanion.SetupBridge.log?.invoke("restart: Play by $by refused ($why)")
@@ -1060,11 +1062,16 @@ fun WoWForeverScreen(
     // THE TOP SCREEN (the user, 2026-10-28): the loading reveal behind the checks, in one framed box centred on the screen, the game's
     // own look ("formal instead of like AI"); the problem report at the box's foot. The companion draws it (LoadingTopView: the kit,
     // the fonts, the scene shared with the bottom screen); the checks reach it through SetupBridge (published above)
-    androidx.compose.ui.viewinterop.AndroidView(
-        factory = { com.jrees.wowcompanion.LoadingTopView(it) },
-        update = { it.error = errorMessage },
-        modifier = Modifier.fillMaxSize(),
-    )
+    Box(Modifier.fillMaxSize()) {
+        androidx.compose.ui.viewinterop.AndroidView(
+            factory = { com.jrees.wowcompanion.LoadingTopView(it) },
+            update = { it.error = errorMessage },
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
+            WowGpuDriverButton(enabled = !isLaunching) { driverSettingsOpen = it }
+        }
+    }
 
 }
 
@@ -1194,6 +1201,9 @@ private data class GpuProfile(val driver: String, val tuDebug: String, val scree
 
 private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, onStatus: (String) -> Unit): String {
     installBundledComponents(context, onStatus)
+    val driver = WowGpuDrivers.resolve(context, gpu.driver)
+    com.jrees.wowcompanion.LauncherHooks.gpuLine =
+        com.jrees.wowcompanion.LauncherHooks.gpuLine.substringBefore("; selected driver ") + "; selected driver $driver"
     // b-dxvk-load-crash: the last run's DXVK log is kept (DXVK truncates it at start: a restart after a crash would erase it)
     runCatching { com.jrees.wowcompanion.DxvkLogs.rotate(com.jrees.wowcompanion.DxvkLogs.dir(context.dataDir)) }
     runCatching { com.jrees.wowcompanion.DxvkLogs.cacheDir(context.dataDir).mkdirs() }       // issue #12: DXVK's state cache
@@ -1258,7 +1268,7 @@ private fun prepareLaunch(context: Context, gameRoot: File, gpu: GpuProfile, onS
     val browser = app.gamenative.ui.screen.wow.auth.BattleNetBrowserLogin.beginRun(context, com.jrees.wowcompanion.SetupBridge.seeding)
     Timber.i("Sign-in this start: %s", if (browser) "browser login (no login.txt)" else "saved login")
     val wineRoot = com.jrees.wowcompanion.NativeLogin.prepare(context, gameRoot, product.flavorDir, browser) ?: gameRoot
-    val config = containerConfig(wineRoot, gpu, "G:\\${product.flavorDir}\\${arm64Exe.name}")
+    val config = containerConfig(wineRoot, gpu.copy(driver = driver), "G:\\${product.flavorDir}\\${arm64Exe.name}")
     val container = containerManager.getContainerById(CONTAINER_ID)
     if (container == null) {
         onStatus("Creating prefix environment (first boot)...")

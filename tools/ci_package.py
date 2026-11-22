@@ -28,6 +28,8 @@ def main():
     if expected not in badging:
         raise ValueError("Wrong fork package or version")
     signing = subprocess.check_output([str(tools / "apksigner"), "verify", "--verbose", "--print-certs", str(apk)], text=True)
+    if "2703b1fd09c7dc3fa45e9e8235771bb6bf78a10d0644d976c3cc8302573c1b3e" not in signing:
+        raise ValueError("Unexpected signing certificate: this is not the Ext release key")
     with zipfile.ZipFile(apk) as archive:
         verify_packaged_components(archive, components)
         for library in ("libcasc.so", "libinteriors.so", "libdsfwhisper.so", "libdsf-moonlight.so"):

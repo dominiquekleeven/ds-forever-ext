@@ -1,4 +1,25 @@
-# DS Forever
+# DS Forever Ext
+
+Test fork of [DS Forever](https://github.com/Jreese702/DS-Forever) for AYN Thor.
+Adds a saved custom Turnip driver selector and replaces Polestar with Questie.
+
+**[Download the test APK](https://github.com/dominiquekleeven/ds-forever-ext/releases)** · [Test instructions and limits](RELEASE_EXT.md)
+
+Installs separately as `app.dsforever.ext` (**DS Forever Ext**). Use a copy of your
+WoW folder to keep the original app's add-ons and settings unchanged. Do not
+uninstall the original app. The fork has its own signing key and update channel.
+
+GitHub Actions builds the APK from this source and publishes tagged prereleases.
+Signing material is kept in repository secrets, never in source. The runtime
+bootstrap uses pinned revisions and verifies upstream component hashes.
+
+The upstream documentation below is retained for attribution and build context;
+its package name, signing identity, Polestar workflow and release URLs describe
+the original app, not this fork. See `RELEASE_EXT.md` for the fork behavior.
+
+---
+
+## Upstream DS Forever
 
 Android launcher and companion for the World of Warcraft: Forever beta. Forked
 from [WoW Forever](https://github.com/jaredgei/wow-forever-android) and
