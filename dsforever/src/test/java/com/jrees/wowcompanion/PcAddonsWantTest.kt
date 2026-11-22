@@ -28,14 +28,15 @@ class PcAddonsWantTest {
     private fun sha(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it.toInt() and 255) }
 
     @Test fun everyManagedPinWithTheThorsWant() {
-        val wants = mapOf("polestar/core" to true, "manners/core" to false)
+        val wants = mapOf("questie/core" to true, "manners/core" to false)
         val a = PcAddonsWant.managed(ThirdPartyAddons.ALL) { ad, k -> wants["${ad.id}/$k"] ?: false }
         val rows = (0 until a.length()).map { a.getJSONObject(it) }
-        val polestar = rows.first { it.getString("id") == "polestar" }
-        assertEquals(ThirdPartyAddons.POLESTAR.core.sha256, polestar.getString("sha256"))
-        assertEquals(ThirdPartyAddons.POLESTAR.core.tag, polestar.getString("tag"))
-        assertEquals("", polestar.getString("url"))                          // a GitHub package goes by its tag, never a URL
-        assertTrue(polestar.getBoolean("want"))
+        assertFalse(rows.any { it.getString("id") == "polestar" })
+        val questie = rows.first { it.getString("id") == "questie" }
+        assertEquals(ThirdPartyAddons.QUESTIE.core.sha256, questie.getString("sha256"))
+        assertEquals(ThirdPartyAddons.QUESTIE.core.tag, questie.getString("tag"))
+        assertEquals("", questie.getString("url"))                          // a GitHub package goes by its tag, never a URL
+        assertTrue(questie.getBoolean("want"))
         val manners = rows.first { it.getString("id") == "manners" }
         assertTrue(manners.getString("url").startsWith("https://mediafilez.forgecdn.net/files/"))
         assertFalse(manners.getBoolean("want"))

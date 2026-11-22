@@ -1912,9 +1912,9 @@ class InteractView(context: Context) : View(context) {
      */
     /** Add-ons > "QuestTrail settings" (test51): the add-on's cell opens QuestTrail's own pages (Interact i123); false = no cell yet */
     fun openAddonSettings(id: String): Boolean {
-        if (id != "questtrail") return false
+        if (id != "questtrail" && id != "questie") return false
         val d = doc ?: return false
-        val cell = d.optJSONObject("questtrail")?.optInt("open", -1) ?: -1
+        val cell = d.optJSONObject(id)?.optInt("open", -1) ?: -1
         if (cell < 0 || dryRun) return false
         return TapBridge.tap(context, d.optJSONObject("pad"), "iact", cell) { why -> post { note(why, false) } }
     }

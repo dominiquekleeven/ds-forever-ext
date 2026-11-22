@@ -360,7 +360,7 @@ class StreamTop(private val activity: Activity, private val shell: Shell) : Surf
                 // the user's ruling 2026-11-18: the PC's stream WoW at this Thor's own UI scale (Desktop puts the PC's back after)
                 uiScale = { thorUiScale() },
                 // Polestar progress follows (the user's pick 2026-11-18): the Thor game's Polestar.lua files, only down a pinned wss connection
-                polestar = { if (h.bridgeTls && h.bridgeFingerprint.isNotEmpty()) polestarCtx() else null }).also { bridge = it }
+                polestar = { null }).also { bridge = it }
         }, "${h.desktopId}@${h.address}:${h.bridgePort}")
     }
 

@@ -70,14 +70,11 @@ local COMMANDS = {
     -- m169 (the user, 2026-11-16: "The polestar previous or next options should be able to be bound to keys in the controller bindings
     -- menus"): Polestar's Next / Previous step (Hub hub57's buttons; the app sends Map.lua's pg2 op 24 / 25 through its one Polestar menu:
     -- nothing skipped, nothing saved; no guide = nothing sent, "No Polestar step"). Icons: the game's gold arrows, right / left
-    { key = "DSPSNEXT", mn = "DS Polestar Next", body = "/click WowCompanionPadPolestarNext", icon = 450908, n = "Polestar: next step" },
-    { key = "DSPSPREV", mn = "DS Polestar Prev", body = "/click WowCompanionPadPolestarPrev", icon = 450906, n = "Polestar: previous step" },
     -- m170 (the user's picks, 2026-11-17: two new bindable DS commands, "Push to talk (hold)" and "Polestar menu"): Hub hub58's buttons.
     -- Push to talk: the app finds the held button on its own reader and records while it stays down (the toolbar's Hold to talk switch
     -- is not needed: binding it is the opt-in); the Polestar menu: the Map room's X route. Icons: the app draws its kit art for both
     -- (PadMapModel.kitArt); these file icons are the Chat / Map commands' own, for anything that reads the number
     { key = "DSPTT", mn = "DS Push to Talk", body = "/click WowCompanionPadTalk", icon = 134332, n = "Push to talk (hold)" },
-    { key = "DSPSMENU", mn = "DS Polestar Menu", body = "/click WowCompanionPadPolestarMenu", icon = 134269, n = "Polestar menu" },
     { key = "TARGETNEARESTENEMY", mn = "DS Target Enemy", body = "/targetenemy", icon = 132212, n = "Target Nearest Enemy" },
     { key = "TARGETNEARESTFRIEND", mn = "DS Target Friend", body = "/targetfriend", icon = 135966, n = "Target Nearest Friend" },
     { key = "TARGETNEARESTENEMYPLAYER", mn = "DS Enemy Player", body = "/targetenemyplayer", icon = 132212, n = "Target Nearest Enemy Player" },

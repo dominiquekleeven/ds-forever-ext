@@ -112,7 +112,7 @@ class ImportedAddonsTest {
         assertEquals(listOf("DBM-Core", "DBM-GUI", "DBM-StatusBarTimers"), spots(z).map { it.second })
     }
     @Test fun aLooseTocAtTheTop() {
-        assertEquals(listOf("" to "Questie"), spots(zip("Questie.toc" to toc(), "Questie.lua" to "x", "Modules/a.lua" to "y")))
+        assertEquals(listOf("" to "UserQuest"), spots(zip("UserQuest.toc" to toc(), "UserQuest.lua" to "x", "Modules/a.lua" to "y")))
     }
     @Test fun aGitHubArchiveFolder() {
         // "Name-main/" holding Name.toc: the folder is named after the .toc
@@ -288,10 +288,10 @@ class ImportedAddonsTest {
 
     // ---------------------------------------------------------------- names never touched
     @Test fun namesProtected() {
-        for (n in listOf("WowCompanion", "wowcompanionhub", "WOWCOMPANIONSPELLS", "WowCompanionAnything", "Polestar", "Polestar_Nav", "QuestieDB",
+        for (n in listOf("WowCompanion", "wowcompanionhub", "WOWCOMPANIONSPELLS", "WowCompanionAnything", "Polestar", "Polestar_Nav", "Questie", "QuestieDB",
                 "questiedb", "Spoken", "SpokenQuestsAudioHorde", "Manners", "QuestTrail", "Blizzard_AuctionUI", DependencyAddons.BACKUP, DependencyAddons.STAGING))
             assertTrue(n, ImportedAddons.protectedName(n))
-        for (n in listOf("Bagnon", "Details", "Questie", "WeakAuras", "Companion")) assertFalse(n, ImportedAddons.protectedName(n))
+        for (n in listOf("Bagnon", "Details", "UserQuest", "WeakAuras", "Companion")) assertFalse(n, ImportedAddons.protectedName(n))
         // the real manifest's folders
         val m = listOf(File("../companion/app/src/main/assets/companion/manifest.txt"), File("companion/app/src/main/assets/companion/manifest.txt"))
             .first { it.canRead() }.readText()
@@ -334,8 +334,8 @@ class ImportedAddonsTest {
         assertEquals("Installed. /reload or restart the game to load them", ImportedAddons.installNow(ImportedAddons.plan(zip("Z/Z.toc" to toc()), addons), game))
     }
     @Test fun aLooseZipGoesInUnderItsName() {
-        ImportedAddons.installNow(ImportedAddons.plan(zip("Questie.toc" to toc(), "Modules/a.lua" to "y"), addons), game)
-        assertEquals("y", File(addons, "Questie/Modules/a.lua").readText())
+        ImportedAddons.installNow(ImportedAddons.plan(zip("UserQuest.toc" to toc(), "Modules/a.lua" to "y"), addons), game)
+        assertEquals("y", File(addons, "UserQuest/Modules/a.lua").readText())
     }
     @Test fun replacingKeepsTheOldInTheBackup() {
         File(addons, "Bagnon").mkdirs(); File(addons, "Bagnon/Bagnon.toc").writeText("## Version: 1.0\n"); File(addons, "Bagnon/old.lua").writeText("old")
@@ -565,7 +565,7 @@ class ImportedAddonsTest {
         for (n in listOf("QuestieDB-Extra", "questiedb-1.0", "Polestar-Nav2", "Polestar_Nav-x", "Spoken-Extra", "Manners-old", "QuestTrail-2",
                 "SpokenQuestsAudioHorde-x", "WowCompanion-Hub", "${DependencyAddons.BACKUP}-x"))
             assertTrue(n, ImportedAddons.protectedName(n))
-        for (n in listOf("Questie", "QuestieDBX", "Spokenish", "Mannerless", "Bagnon-Extra")) assertFalse(n, ImportedAddons.protectedName(n))
+        for (n in listOf("UserQuest", "QuestieDBX", "Spokenish", "Mannerless", "Bagnon-Extra")) assertFalse(n, ImportedAddons.protectedName(n))
         val plan = ImportedAddons.plan(zip("QuestieDB-Extra/QuestieDB-Extra.toc" to toc()), addons)
         assertEquals("Kept: DS Forever's own", plan.single().refused)
     }

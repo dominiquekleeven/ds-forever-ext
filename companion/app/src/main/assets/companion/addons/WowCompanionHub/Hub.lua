@@ -932,6 +932,7 @@ function hub.psHide(fr)
     if not ok or type(a) ~= "number" or a > 0.01 then hub.psZero(fr) end
 end
 function hub.psQuick()
+    if not WC.polestarIntegration then return end
     local P = hub.ps
     if not P.hidden then return end
     for _, name in ipairs(P.NAMES) do
@@ -945,6 +946,7 @@ function hub.psQuick()
     end
 end
 function hub.psApply()
+    if not WC.polestarIntegration then return end
     local P = hub.ps
     if P.hidden then
         for _, nf in ipairs(hub.psFrames()) do hub.psHide(nf[2]) end
@@ -959,6 +961,7 @@ function hub.psApply()
     end
 end
 function hub.psSet(hide)
+    if not WC.polestarIntegration then return end
     hub.ps.hidden = hide == true
     hub.psApply()
 end
@@ -3095,7 +3098,7 @@ do
     local function L() return type(WC.lay) == "table" and WC.lay or nil end
     local function n(v) return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge and v or nil end
     local function combatNow() local ok, v = pcall(InCombatLockdown); return ok and v == true end
-    local function polestar() local t = rawget(_G, "Polestar"); return type(t) == "table" and t or nil end
+    local function polestar() return nil end -- retired: never hook a user's remaining Polestar frames
     function PS.loaded()
         if type(C_AddOns) == "table" and type(C_AddOns.IsAddOnLoaded) == "function" then
             local ok, v = pcall(C_AddOns.IsAddOnLoaded, "Polestar")
@@ -3104,6 +3107,7 @@ do
         return polestar() ~= nil
     end
     function PS.frame(id)
+        if not WC.polestarIntegration then return nil end
         local f = PS.NAME[id] and rawget(_G, PS.NAME[id])
         return (type(f) == "table" and type(f.GetObjectType) == "function") and f or nil
     end

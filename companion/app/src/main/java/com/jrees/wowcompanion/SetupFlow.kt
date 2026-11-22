@@ -344,10 +344,6 @@ object SetupFlow {
             !i.loginSaved && !i.loginSkipped -> Prompt("login", "Your Battle.net login",
                 "Save it once and the game signs you in by itself. It stays encrypted on this device.",
                 listOf(Button("Enter login", Action.ENTER_LOGIN), Button("Play without", Action.SKIP_LOGIN)))
-            // the user, 2026-11-12: the Polestar quest guide, asked once (a title and two buttons: the terse rule); never holds Play.
-            // Not answered: Polestar stays as it is (fetched ahead, not moved in) and the question comes back at the next start
-            i.polestarAsk -> Prompt("polestar", PolestarGuide.TITLE, "",
-                listOf(Button("Yes", Action.POLESTAR_YES), Button("No", Action.POLESTAR_NO)))
             else -> null
         }
         // the client prompt carries its own Play ("Play anyway"); everything else blocking hides behind a disabled Play

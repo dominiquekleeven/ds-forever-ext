@@ -94,7 +94,9 @@ object LauncherSetup {
      *  - the account, realm and character names are never read into anything: the walk holds only File objects, the result is counts.
      * Pure java.io (dsforever's AddonsReenableTest).
      */
-    fun reenable(wtf: File, gameRunning: () -> Boolean): Reenable {
+    fun reenable(wtf: File, gameRunning: () -> Boolean): Reenable = reenable(wtf, gameRunning, emptySet())
+
+    fun reenable(wtf: File, gameRunning: () -> Boolean, extra: Set<String>): Reenable {
         if (gameRunning()) return Reenable(skipped = "not checked: the game is running")
         val account = File(wtf, "Account")
         if (!account.isDirectory) return Reenable(skipped = "none yet (no WTF/Account)")
@@ -107,7 +109,7 @@ object LauncherSetup {
             files++; if (wide) accountWide++
             try {
                 val raw = f.readBytes()
-                val (text, n) = switchOn(String(raw, Charsets.ISO_8859_1))      // byte for byte: every other byte stays as it was
+                val (text, n) = switchOn(String(raw, Charsets.ISO_8859_1), extra)      // byte for byte: every other byte stays as it was
                 if (n == 0) return
                 off++
                 if (gameRunning()) { failed++; why += "the game started"; return }
@@ -152,8 +154,10 @@ object LauncherSetup {
 
     /** the file's text with every one of OUR lines that says "disabled" saying "enabled" (the line's own spacing, ending, a BOM kept),
      *  and how many changed */
-    internal fun switchOn(text: String): Pair<String, Int> {
+    internal fun switchOn(text: String, extra: Set<String> = emptySet()): Pair<String, Int> {
         var n = 0
+        val selected = if (extra.isEmpty()) OURS_OFF else Regex("^((?:\\u00EF\\u00BB\\u00BF)?[ \\t]*(?:WowCompanion[A-Za-z0-9_]*|" +
+            extra.joinToString("|") { Regex.escape(it) } + ")[ \\t]*:[ \\t]*)disabled([ \\t]*)$")
         val out = StringBuilder(text.length + 16)
         var start = 0
         while (start <= text.length) {
@@ -161,7 +165,7 @@ object LauncherSetup {
             val end = if (nl < 0) text.length else nl
             val cr = end > start && text[end - 1] == '\r'
             val body = text.substring(start, if (cr) end - 1 else end)
-            val m = OURS_OFF.matchEntire(body)
+            val m = selected.matchEntire(body)
             if (m != null) { out.append(m.groupValues[1]).append("enabled").append(m.groupValues[2]); n++ } else out.append(body)
             if (cr) out.append('\r')
             if (nl < 0) break

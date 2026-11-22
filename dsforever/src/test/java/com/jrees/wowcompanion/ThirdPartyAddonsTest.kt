@@ -74,6 +74,7 @@ class ThirdPartyAddonsTest {
         ThirdPartyAddons.renameDir = realRename; ThirdPartyAddons.fileRename = realFileRename
         // the real registry's base add-on (Polestar) is never fetched ahead by these tests' start (its worker would call this server)
         ThirdPartyAddons.baseChoice = { false }
+        choices["questie.replacement1122"] = true
         ThirdPartyAddons.start(object : ThirdPartyAddons.Store {
             override fun get(k: String, d: Boolean) = choices[k] ?: d
             override fun put(k: String, v: Boolean) { choices[k] = v }
@@ -82,7 +83,7 @@ class ThirdPartyAddonsTest {
 
     @After fun down() {
         server.close(); tmp.deleteRecursively(); DependencyAddons.api = "https://api.github.com"
-        ThirdPartyAddons.ALL = listOf(ThirdPartyAddons.SPOKEN, ThirdPartyAddons.POLESTAR, ThirdPartyAddons.QUESTTRAIL, ThirdPartyAddons.MANNERS)
+        ThirdPartyAddons.ALL = listOf(ThirdPartyAddons.SPOKEN, ThirdPartyAddons.QUESTIE, ThirdPartyAddons.QUESTTRAIL, ThirdPartyAddons.MANNERS)
         ThirdPartyAddons.renameDir = realRename; ThirdPartyAddons.fileRename = realFileRename; ThirdPartyAddons.settleMs = 5_000L
         ThirdPartyAddons.baseChoice = realBaseChoice; ThirdPartyAddons.setBaseChoice = realSetBaseChoice
         ThirdPartyAddons.noFetch = false
@@ -102,6 +103,33 @@ class ThirdPartyAddonsTest {
         ThirdPartyAddons.applyAtStart(game)
         assertFalse(File(addons, "TestA").exists())
         assertEquals(0L, served)
+    }
+
+    @Test fun questieBundleInstallsOnlyQuestieAndKeepsItsNotices() {
+        zipBytes = zipOf("Questie/Questie_Forever.toc" to "## Interface: 16001\n## Version: 1.0\n",
+            "Questie/LICENSE.md" to "upstream mixed license", "Questie/gpl-3.0.md" to "GPL text",
+            "Questie/Libs/Example/LICENSE" to "library notice",
+            "QuestieDB/QuestieDB_Forever.toc" to "## Version: 1.0\n",
+            "QuestieTrace/QuestieTrace-Forever.toc" to "## Version: 1.0\n")
+        val sample = addon(zipBytes)
+        val a = sample.copy(id = "questie", core = sample.core.copy(folders = listOf("Questie")))
+        ThirdPartyAddons.ALL = listOf(a)
+        choices["questie.core"] = true
+        File(addons, "QuestieDB").mkdirs()
+        File(addons, "QuestieDB/keep.txt").writeText("existing database")
+        val enabled = File(game, "WTF/Account/FAKE/AddOns.txt").apply {
+            parentFile.mkdirs(); writeText("Questie: disabled\nQuestieDB: disabled\nPolestar: disabled\n")
+        }
+        ThirdPartyAddons.fetchNow(a, "core")
+        ThirdPartyAddons.applyAtStart(game, fetchSmall = false)
+        assertTrue(ThirdPartyAddons.coreInstalled(a))
+        assertEquals(listOf("Questie"), ThirdPartyAddons.folders(a, "core"))
+        assertEquals("existing database", File(addons, "QuestieDB/keep.txt").readText())
+        assertFalse(File(addons, "QuestieTrace").exists())
+        assertEquals("upstream mixed license", File(addons, "Questie/LICENSE.md").readText())
+        assertEquals("GPL text", File(addons, "Questie/gpl-3.0.md").readText())
+        assertEquals("library notice", File(addons, "Questie/Libs/Example/LICENSE").readText())
+        assertEquals("Questie: enabled\nQuestieDB: enabled\nPolestar: disabled\n", enabled.readText())
     }
 
     @Test fun installThenUninstall() {

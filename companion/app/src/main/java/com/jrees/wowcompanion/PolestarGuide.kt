@@ -22,13 +22,13 @@ object PolestarGuide {
     const val OFF = "off"
 
     /** the quest-tracking mode for a choice: Polestar only while the guide is on (the user, 2026-11-12: the modes are Vanilla and Polestar) */
-    fun mode(guide: String?): String = if (guide == ON) "polestar" else "vanilla"
+    fun mode(guide: String?): String = "vanilla"
 
     /** the launcher's prompt shows: not asked yet */
-    fun ask(guide: String?): Boolean = guide != ON && guide != OFF
+    fun ask(guide: String?): Boolean = false
 
     /** the add-on is wanted in AddOns: true / false; null = not asked yet (what is there stays) */
-    fun wanted(guide: String?): Boolean? = when (guide) { ON -> true; OFF -> false; else -> null }
+    fun wanted(guide: String?): Boolean? = false
 
     /**
      * THE ONE-TIME MOVE (2026-11-12, the user: "If anyone used these default them over to the polestar quest tracking"): the choice to
@@ -48,9 +48,7 @@ object PolestarGuide {
 
     /** the press on the prompt's Yes / No, the Settings toggle, or Quest tracking's segment: the choice, and the add-on follows it */
     fun set(on: Boolean) {
-        val v = if (on) ON else OFF
-        if (Settings.polestarGuide != v) Settings.polestarGuide = v
-        ThirdPartyAddons.choiceChanged(ThirdPartyAddons.POLESTAR)
+        // Retired: stale prompts must not reinstall Polestar or change Questie's independent choice.
     }
 
     /** the prompt's words (terse: a title and two buttons, the user's terse rule) */

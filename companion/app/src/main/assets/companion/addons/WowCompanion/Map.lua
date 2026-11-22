@@ -2968,6 +2968,8 @@ do
 end
 
 -- ---------------------------------------------------------------- POLESTAR AS THE ROUTER (b-route-polestar)
+-- Retired in Ext: Questie has no Polestar guide/step API. Do not register its pad, timers or automation.
+if false then
 -- The user (2026-10-17): "Quest tracking: Vanilla | QuestTrail | Polestar", the setting deciding what the map's line and arrows follow;
 -- with Polestar (downloaded on opt-in, never bundled; GPL-3) the focused quest's goal is handed to Polestar's PUBLIC Nav API
 -- (docs/ARCHITECTURE.md "Nav API", version 1: Navigate(owner, uiMapID, x, y, title) / Cancel(owner) / Active()) and its walking route
@@ -4257,6 +4259,7 @@ do
 end
 
 -- ---------------------------------------------------------------- QUESTTRAIL'S ARROW, READ (b-route-questtrail)
+end -- retired Polestar integration
 -- The user (2026-10-17): "(a) + (b)" - with Settings' "Quest tracking: QuestTrail" the map's line and arrow follow QuestTrail's own
 -- guidance arrow (QuestTrail by Krom, MIT; player-chosen). QuestTrail has no public API (3.1.0: everything in its private
 -- namespace), so this READS its compass frame: QuestTrailArrowFrame.bearing (its own, exact: 0 = north, counter-clockwise, like

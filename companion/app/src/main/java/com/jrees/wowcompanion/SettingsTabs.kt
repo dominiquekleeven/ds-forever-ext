@@ -156,6 +156,7 @@ object SettingsTabs {
         // the cards (2026-11-17): Polestar, Spoken, Manners, then QuestTrail (only while a copy is there: last, so it never leaves a hole);
         // Quest tracking is Polestar's card's guide line (the same PolestarGuide choice)
         ADDON_POLESTAR(Group.CARDS, "Polestar", ThirdPartyAddons.POLESTAR.rowWords(), Drawer.ADDONS),
+        ADDON_QUESTIE(Group.CARDS, "Questie", ThirdPartyAddons.QUESTIE.rowWords(), Drawer.ADDONS),
         QUEST_TRACKING(Group.CARDS, "Quest tracking", listOf("Quest tracking"), Drawer.ADDONS),
         ADDON_SPOKEN(Group.CARDS, "Spoken", ThirdPartyAddons.SPOKEN.rowWords(), Drawer.ADDONS),
         ADDON_MANNERS(Group.CARDS, "Manners", ThirdPartyAddons.MANNERS.rowWords(), Drawer.ADDONS),
@@ -181,6 +182,7 @@ object SettingsTabs {
 
     /** the third-party add-on a block draws (Settings > Add-ons), or null */
     fun addonOf(b: Block): ThirdPartyAddons.Addon? = when (b) {
+        Block.ADDON_QUESTIE -> ThirdPartyAddons.QUESTIE
         Block.ADDON_SPOKEN -> ThirdPartyAddons.SPOKEN; Block.ADDON_POLESTAR -> ThirdPartyAddons.POLESTAR
         Block.ADDON_QUESTTRAIL -> ThirdPartyAddons.QUESTTRAIL; Block.ADDON_MANNERS -> ThirdPartyAddons.MANNERS; else -> null }
 
@@ -211,8 +213,8 @@ object SettingsTabs {
     /** 1.0.9 (the user: "Disable the safe path, quest trail and polestar buttons for now"): with the route modes held back, the
      *  Polestar and QuestTrail blocks are not shown (Spoken stays) */
     fun shown(b: Block): Boolean = when {
+        b == Block.ADDON_POLESTAR || b == Block.POLESTAR_TOP || b == Block.QUEST_TRACKING -> false
         b == Block.ADDON_VOICE -> VoiceModels.offered()
-        !Settings.ROUTE_MODES_ON -> b != Block.ADDON_POLESTAR && b != Block.ADDON_QUESTTRAIL
         // 2026-11-12 (the user: "remove ... quest trail from the options"): QuestTrail is never offered; a copy a player installed keeps
         // its block (its Uninstall) while it is there or on its way in
         b == Block.ADDON_QUESTTRAIL -> ThirdPartyAddons.present(ThirdPartyAddons.QUESTTRAIL, "core") ||

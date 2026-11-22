@@ -29,6 +29,19 @@ jobs:
             -Dorg.gradle.parallel=false '-Dorg.gradle.jvmargs=-Xmx5g -Dfile.encoding=UTF-8' \
             -Pkotlin.compiler.execution.strategy=in-process \
             :app:testModernDebugUnitTest --tests '*WowGpuDriversTest'
+      - name: Test Questie replacement and Ext update channel
+        run: |
+          bash gradlew --no-daemon --no-configuration-cache --max-workers=2 \
+            -Dorg.gradle.parallel=false '-Dorg.gradle.jvmargs=-Xmx5g -Dfile.encoding=UTF-8' \
+            -Pkotlin.compiler.execution.strategy=in-process \
+            :dsforever:testDebugUnitTest --tests '*QuestieReplacementTest' --tests '*ExtUpdateTest' \
+            --tests '*AddonsReenableTest' --tests '*PolestarGuideTest' --tests '*ThirdPartyAddonsTest' \
+            --tests '*ImportedAddonsTest' --tests '*PcAddonsWantTest' --tests '*SettingsTabsTest'
+      - name: Test bundled Lua and add-on manifest
+        run: |
+          python3 -m venv "$RUNNER_TEMP/lua-tests"
+          "$RUNNER_TEMP/lua-tests/bin/pip" install 'lupa==2.6'
+          "$RUNNER_TEMP/lua-tests/bin/python" companion/tools/test_questie_replacement.py
       - name: Restore fork signing identity
         env:
           KEYSTORE: ${{ secrets.EXT_KEYSTORE_BASE64 }}

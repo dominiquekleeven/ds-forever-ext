@@ -30,4 +30,4 @@ for f in "${FILES[@]}"; do
     fi
 done
 
-(cd "$DEST" && shasum -a 256 -c "$REPO_DIR/tools/components.sha256")
+(cd "$DEST" && tr -d '\r' < "$REPO_DIR/tools/components.sha256" | shasum -a 256 -c -)

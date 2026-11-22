@@ -19,7 +19,7 @@ import java.util.zip.ZipOutputStream
  */
 object ProblemReport {
     const val WINDOW_MS = 15 * 60_000L
-    const val REPO = "Jreese702/DS-Forever"
+    const val REPO = "dominiquekleeven/ds-forever-ext"
     private const val MAX_DESCRIPTION_IN_URL = 1500
     private const val MAX_CRASHES = 3
 

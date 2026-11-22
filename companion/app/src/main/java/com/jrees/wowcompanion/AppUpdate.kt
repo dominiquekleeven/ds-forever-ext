@@ -26,7 +26,7 @@ import java.util.zip.ZipFile
  */
 object AppUpdate {
     /** the release asset: "DS-Forever-<version>.apk" (e.g. DS-Forever-1.0.3.apk); nothing else is ever downloaded */
-    val ASSET = Regex("""^DS-Forever-v?(\d+(?:\.\d+){0,3})\.apk$""")
+    val ASSET = Regex("""^DS-Forever-v?(\d+(?:\.\d+){0,3}(?:-ext\.\d+)?)\.apk$""")
     /** a try fails only after this long with no byte at all (not a deadline for the whole file) */
     const val STALL_MS = 60_000L
     /** tries per press; each one resumes, and only a stall ([STALL_MS] with no byte) ends them sooner */
@@ -76,8 +76,11 @@ object AppUpdate {
     private fun check0(repo: String, current: String, userAgent: String, log: (String) -> Unit, cache: File?): Check {
         if (!repo.matches(Regex("""[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"""))) return Check.Skipped("no release repo yet").also { log("update: no release repo set") }
         val live = try {
-            val body = get("$api/repos/$repo/releases/latest", userAgent).toString(Charsets.UTF_8)
-            parse(body, current).also { log("update: checked $repo: $it") }
+            // GitHub's /latest deliberately excludes prereleases. Ext is a test-release channel.
+            val ext = current.contains("-ext.")
+            val endpoint = if (ext) "releases?per_page=20" else "releases/latest"
+            val body = get("$api/repos/$repo/$endpoint", userAgent).toString(Charsets.UTF_8)
+            (if (ext) parseExtReleases(body, current) else parse(body, current)).also { log("update: checked $repo: $it") }
         } catch (t: Throwable) {
             // the API's 60 calls an hour per IP (the user, 2026-11-11: updates on slow links): the releases page instead
             log("update: API check failed (${reason(t)}); trying the releases page")
@@ -104,7 +107,7 @@ object AppUpdate {
             tagFromLatest(c.getHeaderField("Location")) ?: throw IOException("no release")
         } finally { c.disconnect() }
         val version = tag.removePrefix("v").removePrefix("V")
-        if (!version.matches(Regex("""\d+(\.\d+){0,3}"""))) return Check.Skipped("no release")
+        if (!version.matches(Regex("""\d+(\.\d+){0,3}(?:-ext\.\d+)?"""))) return Check.Skipped("no release")
         if (current !in NOT_OURS && compare(version, current) <= 0) return Check.UpToDate(version)
         val name = "DS-Forever-$version.apk"
         val base = "$web/$repo/releases/download/$tag"
@@ -144,12 +147,23 @@ object AppUpdate {
         r.takeIf { fresh && ok && (current in NOT_OURS || compare(r.version, current) > 0) }
     } catch (_: Throwable) { null }
 
+    internal fun parseExtReleases(json: String, current: String): Check {
+        val releases = try { org.json.JSONArray(json) } catch (_: Throwable) { return Check.Skipped("bad release data") }
+        for (i in 0 until releases.length()) {
+            val release = releases.optJSONObject(i) ?: continue
+            if (release.optBoolean("draft") || !release.optString("tag_name").contains("-ext.")) continue
+            val result = parse(release.toString(), current)
+            if (result !is Check.Skipped) return result
+        }
+        return Check.Skipped("no Ext release")
+    }
+
     /** pure: a release document against [current] */
     fun parse(json: String, current: String): Check {
         val rel = try { JSONObject(json) } catch (t: Throwable) { return Check.Skipped("bad release data") }
         val tag = rel.optString("tag_name")
         val version = tag.removePrefix("v").removePrefix("V")
-        if (!version.matches(Regex("""\d+(\.\d+){0,3}"""))) return Check.Skipped("no release")
+        if (!version.matches(Regex("""\d+(\.\d+){0,3}(?:-ext\.\d+)?"""))) return Check.Skipped("no release")
         if (current !in NOT_OURS && compare(version, current) <= 0) return Check.UpToDate(version)
         val assets = rel.optJSONArray("assets") ?: return Check.Skipped("no update file in $tag")
         for (i in 0 until assets.length()) {
@@ -179,7 +193,9 @@ object AppUpdate {
             val d = x.getOrElse(i) { 0 }.compareTo(y.getOrElse(i) { 0 })
             if (d != 0) return d
         }
-        return 0
+        val ext = Regex("""-ext\.(\d+)$""")
+        return (ext.find(a)?.groupValues?.get(1)?.toLongOrNull() ?: 0L)
+            .compareTo(ext.find(b)?.groupValues?.get(1)?.toLongOrNull() ?: 0L)
     }
 
     /**

@@ -4970,6 +4970,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
      *  step through the one Polestar menu ([PolestarStepChoice.command]); a refusal on the short line over the room (the pause wheel's).
      *  No room may draw the menu (Home): the host ticks its wait until the answer, so a lost one never keeps the next press waiting */
     private fun polestarStepCommand(next: Boolean) {
+        if (!Settings.ROUTE_MODES_ON) return
         val m = questsView.psMenu
         val say: (String) -> Unit = { line -> if (::pauseView.isInitialized) pauseView.note(line) }
         Log.i("WCMAP", "polestar ${if (next) "next" else "previous"} step: the bound command")
@@ -4987,6 +4988,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
      * the Map room or on the pause wheel's line (as the step commands say it).
      */
     private fun polestarMenuCommand() {
+        if (!Settings.ROUTE_MODES_ON) return
         val can = questsView.psShows()
         Log.i("WCMAP", "polestar menu: the bound command in ${room.name}${if (can) "" else ": no Polestar"}")
         if (!can) {
@@ -5026,6 +5028,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
     private var psHandoffStreaming = false
     private var psHandoffOpened = false
     private fun polestarHandoff(msg: JSONObject) {
+        if (!Settings.ROUTE_MODES_ON) return
         val g = PolestarTab.Guide.parse(msg) ?: return
         val ch = GameUi.character ?: return
         val prefs = getSharedPreferences(PolestarHandoff.PREFS, MODE_PRIVATE)
@@ -5058,6 +5061,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
     // POLESTAR AS THE ROUTER (b-route-polestar): PolestarNav decides the taps of Map.lua's row "pnav" (only while the setting is Polestar;
     // switching away cancels its guidance)
     private fun polestarTick() {
+        if (!Settings.ROUTE_MODES_ON) return
         val pad = questsPad ?: return
         if (pad.optJSONObject("rows")?.has(PolestarNav.ROW) != true) return          // an older add-on: no Polestar bridge
         // pn4 (the user, 2026-11-11): the add-on is told while the light blue Polestar row holds (its compass leads to Polestar's goal);

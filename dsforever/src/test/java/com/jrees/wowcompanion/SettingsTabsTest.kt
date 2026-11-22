@@ -97,7 +97,7 @@ class SettingsTabsTest {
                 "Spell wheel: pick", "Left class radial: open", "Left class radial: pick", "Right class radial: open", "Right class radial: pick"),
             G.SMART_Y to listOf("Smart Y"),
             G.COMBAT to listOf("Party mode", "Smart Res", "Start attack on hostile target", "Start the attack when a spell is cast", "Combat Auto Shot"),
-            G.CARDS to ThirdPartyAddons.POLESTAR.rowWords() + "Quest tracking" + ThirdPartyAddons.SPOKEN.rowWords() +
+            G.CARDS to ThirdPartyAddons.POLESTAR.rowWords() + ThirdPartyAddons.QUESTIE.rowWords() + "Quest tracking" + ThirdPartyAddons.SPOKEN.rowWords() +
                 ThirdPartyAddons.MANNERS.rowWords() + ThirdPartyAddons.QUESTTRAIL.rowWords(),
             G.VOICE to listOf("Voice: English · 60 MB", "Voice: English · 148 MB", "Voice: other languages · 60 MB", "Voice: other languages · 148 MB"),
             // the user, 2026-11-16: "maybe we just do an import addons button then?"; then "Import addons should be a single button at
@@ -136,7 +136,7 @@ class SettingsTabsTest {
             "Chat window", "NPC windows", "Loot window", "Player frame", "Target bar", "Target health text", "Target of target", "Target frame",
             "DS party frames", "Party frames", "Cast bar", "Enemy nameplates", "Game tooltips", "Minimap zoom outdoors", "Minimap zoom indoors",
             "Quest tracking", "World map", "Message input") +
-            ThirdPartyAddons.SPOKEN.rowWords() + ThirdPartyAddons.POLESTAR.rowWords() + ThirdPartyAddons.QUESTTRAIL.rowWords() +
+            ThirdPartyAddons.SPOKEN.rowWords() + ThirdPartyAddons.POLESTAR.rowWords() + ThirdPartyAddons.QUESTIE.rowWords() + ThirdPartyAddons.QUESTTRAIL.rowWords() +
             ThirdPartyAddons.MANNERS.rowWords() +
             listOf("Frame limit", "Lossless.dll", "Frame generation", "Multiplier", "Flow scale", "Performance mode", "Restart the game",
                 "Build in the background", "Progress", "Route data", "Language", "Reload game UI", "Battle.net login", "Problem report",

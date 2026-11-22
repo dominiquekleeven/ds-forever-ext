@@ -53,6 +53,8 @@ object Settings {
                 e.putString("questTracking", PolestarGuide.mode(guide))
                 e.putBoolean(QT_POLESTAR, true).apply()
             }
+            // Preserve the old answer for recovery, but never expose its guide or reinstall it.
+            if (p.getString("questTracking", null) != "vanilla") p.edit().putString("questTracking", "vanilla").apply()
         }
     }
 
@@ -81,7 +83,7 @@ object Settings {
      * prompt, Settings > Add-ons > Polestar (the guide's On / Off and Quest tracking; all through [PolestarGuide.set]); the launcher reads the same prefs
      */
     var polestarGuide: String?
-        get() = prefs?.getString(GUIDE, null)?.takeIf { it == PolestarGuide.ON || it == PolestarGuide.OFF }
+        get() = PolestarGuide.OFF
         set(v) {
             val p = prefs ?: return
             val e = p.edit()
@@ -130,10 +132,9 @@ object Settings {
      * old value arriving, a restored backup) is never read; their code and SafePath's shipped data stay, unreachable.
      */
     var questTracking: String
-        get() = if (!ROUTE_MODES_ON) "vanilla" else PolestarGuide.mode(polestarGuide)
+        get() = "vanilla"
         set(v) {
-            if (!ROUTE_MODES_ON) return                     // held back for 1.0.9: the stored choice is kept for when they return
-            PolestarGuide.set(v == "polestar")              // one choice: the add-on goes in / out with it
+            // Questie owns its tracker. Native companion maps keep the game's quest tracking.
         }
     /** ps3 (the user, 2026-11-11): the Polestar row was turned off in the login with this pstep stamp ("b"); any other stamp = picked,
      *  the default at each login. Not keyed by character: a new login has a new stamp anyway */
@@ -141,10 +142,10 @@ object Settings {
         get() = prefs?.getLong("polestarOffBoot", 0L) ?: 0L
         set(v) { prefs?.edit()?.putLong("polestarOffBoot", v)?.apply() }   // no changed(): nothing else listens for it
     /** the user (1.0.9 release): "Disable the safe path, quest trail and polestar buttons for now" - Vanilla only until this is true */
-    const val ROUTE_MODES_ON = true
+    const val ROUTE_MODES_ON = false
     /** VANILLA: the game's own way, the line straight at the quest, no route, no pin; POLESTAR: Polestar's walking route. SafePath
      *  and QuestTrail are no longer choices (the user, 2026-11-12) */
-    val QUEST_TRACKING = listOf("vanilla", "polestar")
+    val QUEST_TRACKING = listOf("vanilla")
     /** the retired modes (the user, 2026-11-12): never chosen, never read; a stored one became Polestar once ([PolestarGuide.migrate]) */
     val RETIRED_QUEST_TRACKING = listOf("safepath", "questtrail")
 

@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import zipfile
 
 from build_release import verified_components, verify_packaged_components, verify_addon_manifest
@@ -30,6 +31,12 @@ def main():
     signing = subprocess.check_output([str(tools / "apksigner"), "verify", "--verbose", "--print-certs", str(apk)], text=True)
     if "2703b1fd09c7dc3fa45e9e8235771bb6bf78a10d0644d976c3cc8302573c1b3e" not in signing:
         raise ValueError("Unexpected signing certificate: this is not the Ext release key")
+    subprocess.run(["bash", str(root / "companion/tools/harvest/check_apk_art.sh"), str(apk)],
+                   env=dict(os.environ, AAPT2=str(tools / "aapt2")), check=True)
+    audits = root / "companion/tools/interiors_device"
+    subprocess.run([sys.executable, "-I", str(audits / "apk_jni_check.py"), str(apk), str(tools / "dexdump")], check=True)
+    subprocess.run([sys.executable, "-I", str(audits / "apk_callback_audit.py"), str(apk),
+                    "--dexdump", str(tools / "dexdump")], check=True)
     with zipfile.ZipFile(apk) as archive:
         verify_packaged_components(archive, components)
         for library in ("libcasc.so", "libinteriors.so", "libdsfwhisper.so", "libdsf-moonlight.so"):

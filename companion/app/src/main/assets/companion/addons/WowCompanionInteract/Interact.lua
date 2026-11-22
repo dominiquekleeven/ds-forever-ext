@@ -1783,6 +1783,10 @@ local function assignSlots(doc)
         doc.questtrail = { on = qon, cells = { on = slot("iact", "qtmode on"), off = slot("iact", "qtmode off") },
                            open = qon and slot("iact", "qtopen") or nil }
     end
+    -- Questie's own /questie settings window stays on the top screen. No Polestar protocol or guide-step emulation.
+    if type(SlashCmdList) == "table" and type(SlashCmdList.ACECONSOLE_QUESTIE) == "function" then
+        doc.questie = { open = slot("iact", "questieopen") }
+    end
     -- 1.0.9 Spoken's two stop options (Settings > Add-ons): a cell for each value; the app taps the one its setting says
     if doc.spoken then
         doc.spoken.cells = { closeOn = slot("iact", "spkopt close on"), closeOff = slot("iact", "spkopt close off"),
@@ -1792,7 +1796,7 @@ local function assignSlots(doc)
     slot("iact", "stay")
     local ok, d = pcall(pad.describe)
     padNow = ok and d or nil
-    if any or doc.spoken or doc.questtrail then doc.pad = padNow end
+    if any or doc.spoken or doc.questtrail or doc.questie then doc.pad = padNow end
     for _, ns in ipairs(NS) do pcall(pad.retain, ns, present[ns]) end
 end
 
@@ -3878,6 +3882,12 @@ function N.qt.hideArrow()
 end
 -- ---- "QUESTTRAIL SETTINGS" (Add-ons): QuestTrail's own pages, through its own command (/qtr setup), mirrored and browsable by its
 -- steps' titles (read by stepping through once with its own arrows, then back to the first)
+function ACT.questieopen()
+    if InCombatLockdown() then return false, "combat" end
+    local open = type(SlashCmdList) == "table" and SlashCmdList.ACECONSOLE_QUESTIE
+    if type(open) ~= "function" then return false, "Questie is not loaded" end
+    return pcall(open, "")
+end
 function ACT.qtopen()
     if not N.qt.on() then return false, "QuestTrail mode is off" end
     if N.qt.open() then return true end

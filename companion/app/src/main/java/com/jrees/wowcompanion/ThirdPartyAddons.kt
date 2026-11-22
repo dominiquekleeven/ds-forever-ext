@@ -108,6 +108,16 @@ object ThirdPartyAddons {
             listOf("Polestar", "Polestar_Nav")),
         inUse = { Settings.questTracking == "polestar" }, usedIn = "Add-ons › Polestar › Quest tracking", base = true)
 
+    /** Official bundle, verified 2026-11-22: Questie_Forever.toc is Interface 16001.
+     * Only Questie is installed. QuestieDB remains DependencyAddons' responsibility; QuestieTrace is optional.
+     * The package's LICENSE.md, gpl-3.0.md and embedded library notices stay with Questie. */
+    val QUESTIE = Addon(
+        id = "questie", title = "Questie", what = "Quest objectives, map icons and a quest tracker for WoW Forever",
+        by = "Questie team", license = "Mixed; see Questie/LICENSE.md", repo = "Questie/Questie", version = "12.12.0",
+        core = Pkg("bundle/v12.12.0+v1.1.4", "Questie-v12.12.0+v1.1.4.zip", 88_661_277L,
+            "116eadd5833836d1b8ff30c9c8b5aaf724bc2de75eea362d6eee3d9962506b5f", listOf("Questie")),
+        settings = "Questie settings")
+
     /**
      * QUESTTRAIL (Krom, MIT; CurseForge project 1725624; Map's "Quest tracking: QuestTrail", the user: "Download it
      * (Add-ons tab)"): learns where quests are taken, done and handed in; a guidance arrow that plans the route. One folder,
@@ -143,7 +153,7 @@ object ThirdPartyAddons {
         core = Pkg("1.11.0", "Manners-v1.11.0.zip", 3_654_185L, "20dc080b26687fd2de4a457283fd27f09c1096a6d45df2b41f8d290a1b6a03ef",
             listOf("Manners"), url = "https://mediafilez.forgecdn.net/files/9408/996/Manners-v1.11.0.zip"))
 
-    var ALL: List<Addon> = listOf(SPOKEN, POLESTAR, QUESTTRAIL, MANNERS)
+    var ALL: List<Addon> = listOf(SPOKEN, QUESTIE, QUESTTRAIL, MANNERS)
         internal set                                            // the off-device test swaps in its own
 
     /** "1.5 GB" / "447 MB" */
@@ -177,6 +187,12 @@ object ThirdPartyAddons {
         dir = folder
         synchronized(live) { live.clear() }
         loadState()
+        // The requested replacement is installed once. An explicit later Uninstall is kept.
+        if (prefs?.get("questie.replacement1122", false) != true) {
+            prefs?.put("questie.core", true)
+            prefs?.put("questie.migrated", true)
+            prefs?.put("questie.replacement1122", true)
+        }
         // test40: Polestar / QuestTrail installed while Map's setting switched them in (no Install of their own then): their Install
         // stands now, so they stay until their Uninstall (once, flagged)
         for (a in ALL) if (!a.base && installed(a, "core") && prefs?.get("${a.id}.migrated", false) != true) {
@@ -204,7 +220,7 @@ object ThirdPartyAddons {
 
     /** the core is wanted: Install pressed (and not Uninstall since); a base add-on: its choice, and not asked yet = as it is now */
     fun coreWanted(a: Addon): Boolean =
-        if (a.base) baseChoice(a) ?: present(a, "core") else prefs?.get("${a.id}.core", false) ?: false
+        if (a.id == POLESTAR.id) false else if (a.base) baseChoice(a) ?: present(a, "core") else prefs?.get("${a.id}.core", false) ?: false
     fun setCore(a: Addon, on: Boolean) {
         if (a.base) { setBaseChoice(a, on); return }
         prefs?.put("${a.id}.core", on); if (on) clearFailed(a, "core"); changed(); resume()
@@ -212,7 +228,7 @@ object ThirdPartyAddons {
     /** a base add-on's choice changed ([PolestarGuide.set]): its download starts (or stops) now, its move waits for the next start */
     fun choiceChanged(a: Addon) { if (coreWanted(a)) clearFailed(a, "core"); changed(); resume() }
     /** a base add-on not asked about yet: its package is fetched ahead (a Yes then goes in at once), never moved in */
-    fun prefetch(a: Addon, key: String): Boolean = a.base && key == "core" && baseChoice(a) == null
+    fun prefetch(a: Addon, key: String): Boolean = a.id != POLESTAR.id && a.base && key == "core" && baseChoice(a) == null
     /** the package is downloaded: wanted, or fetched ahead */
     private fun fetchWanted(a: Addon, key: String): Boolean = wanted(a, key) || prefetch(a, key)
     /** MAP'S HOOK (its Quest tracking picker): choosing an add-on that is not installed starts its install, as Install here does */
@@ -489,6 +505,9 @@ object ThirdPartyAddons {
         // the user, 2026-11-18 ("part of the DS forever startup should be maintaining/updating enabled addons"): an installed package whose
         // folder (or its .toc) was deleted from AddOns is not installed any more: downloaded again (or its kept zip) and moved in below
         repairMissing(flavorRoot)
+        runCatching { retirePolestar(flavorRoot) }
+            .onSuccess { if (it) lines.add("Polestar moved to disabled storage") }
+            .onFailure { lines.add("Polestar retirement deferred (${DependencyAddons.reasonOf(it)})") }
         for (a in ALL) for ((key, p) in a.pkgs()) {
             val name = if (key == "core") a.title else "${a.title} ${key.replaceFirstChar { it.uppercase() }}"
             try {
@@ -533,6 +552,10 @@ object ThirdPartyAddons {
                 // #412: a big pack (Spoken Quests: 1.5 GB, ~7 min on a Thor) says how far its unpack is (a line only when it changes)
                 var line = "Installing add-ons: $name..."
                 moveIn(a, key, p, flavorRoot) { pct -> installLine(name, pct).let { if (it != line) { line = it; onStep(it) } } }
+                if (a.id == QUESTIE.id) {
+                    val enabled = LauncherSetup.reenable(File(flavorRoot, "WTF"), DependencyAddons.gameRunning, setOf("Questie", "QuestieDB"))
+                    if (enabled.failed > 0) lines.add("Questie enable failed in ${enabled.failed} AddOns.txt files")
+                }
                 val ver = a.version.takeIf { key == "core" } ?: p.tag.substringAfterLast('v')
                 lines.add("$name $ver installed")
                 log("add-ons: applied $name $ver")
@@ -617,12 +640,14 @@ object ThirdPartyAddons {
         try {
             if (!staged) {
                 if (staging.exists()) staging.deleteRecursively()             // our own leftover only
-                DependencyAddons.unpack(zipOf(p), staging, "", maxFiles = 40_000, maxBytes = p.bytes * 3 / 2 + 50_000_000,
+                DependencyAddons.unpack(zipOf(p), staging, "", maxFiles = 40_000,
+                    maxBytes = if (a.id == QUESTIE.id) 256L * 1024 * 1024 else p.bytes * 3 / 2 + 50_000_000,
                     progress = progress)
                 keepNotices(staging)
                 mark.writeText(sig(p))
             } else log("add-ons: ${a.id}-$key: the staged copy is complete, not unpacked again")
-            val folders = staging.listFiles()?.filter { d -> d.isDirectory && DependencyAddons.installedVersion(d) != null } ?: emptyList()
+            val folders = staging.listFiles()?.filter { d -> d.isDirectory && DependencyAddons.installedVersion(d) != null &&
+                (a.id != QUESTIE.id || d.name in p.folders) } ?: emptyList()
             require(folders.isNotEmpty()) { "the package has no add-on in it" }
             if (DependencyAddons.gameRunning()) { keep = true; throw Later("the game started: at the next start") }
             // (review, 2026-11-11) the mark goes BEFORE the first folder leaves staging: a move cut short (a low-memory kill, #99 #93)
@@ -675,6 +700,31 @@ object ThirdPartyAddons {
         putState(a, key, JSONObject())
         // a module goes out with its core
         if (key == "core") for (m in a.modules) if (installed(a, m.id)) moveOut(a, m.id, flavorRoot)
+    }
+
+    /** Retire the two named Polestar add-ons even in a copied game folder, plus recorded package folders.
+     * SavedVariables and other unrecorded user add-ons are untouched.
+     * Recovery: move the unique disabled folder back into Interface/AddOns with WoW closed. No retention pruning. */
+    internal fun retirePolestar(flavorRoot: File): Boolean {
+        val names = (POLESTAR.core.folders + folders(POLESTAR, "core")).distinct()
+        val addons = File(flavorRoot, "Interface/AddOns")
+        if (!present(POLESTAR, "core") && names.none { File(addons, it).exists() }) return false
+        if (DependencyAddons.gameRunning()) throw Later("the game is running")
+        val disabled = File(flavorRoot, "Interface/AddOns-disabled-dsforever").apply { mkdirs() }
+        require(!java.nio.file.Files.isSymbolicLink(disabled.toPath()) &&
+            disabled.canonicalFile.parentFile == File(flavorRoot, "Interface").canonicalFile) { "linked disabled storage" }
+        for (name in names) {
+            require(name.matches(Regex("[A-Za-z0-9_-]+")) && name.startsWith("Polestar")) { "unrecognized managed Polestar folder" }
+            val source = File(addons, name)
+            if (!source.exists()) continue
+            require(source.canonicalFile.parentFile == addons.canonicalFile && !java.nio.file.Files.isSymbolicLink(source.toPath())) { "linked Polestar folder" }
+            var target = File(disabled, name)
+            var n = 2
+            while (target.exists()) target = File(disabled, "$name~${n++}")
+            moveDir(source, target, "Polestar could not be moved to disabled storage")
+        }
+        putState(POLESTAR, "core", JSONObject())
+        return true
     }
 
     /**
