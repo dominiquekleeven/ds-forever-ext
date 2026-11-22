@@ -166,6 +166,7 @@ android {
             isIncludeAndroidResources = true
             all {
                 it.maxHeapSize = "4g"
+                it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
                 it.testLogging { events("started", "failed") }
             }
         }

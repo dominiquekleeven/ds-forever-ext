@@ -19,6 +19,9 @@ def main():
     config = (root / "app/build.gradle.kts").read_text()
     version = re.search(r'versionName = "([^"]+)"', config)[1]
     code = re.search(r'versionCode = (\d+)', config)[1]
+    ref = os.environ.get("GITHUB_REF", "")
+    if ref.startswith("refs/tags/") and ref != f"refs/tags/v{version}":
+        raise ValueError("Release tag must match the APK versionName")
     candidates = list((root / "app/build/outputs/apk/modern/release").glob("*.apk"))
     if len(candidates) != 1:
         raise ValueError("Expected exactly one release APK")

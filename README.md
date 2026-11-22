@@ -12,6 +12,7 @@ uninstall the original app. The fork has its own signing key and update channel.
 GitHub Actions builds the APK from this source and publishes tagged prereleases.
 Signing material is kept in repository secrets, never in source. The runtime
 bootstrap uses pinned revisions and verifies upstream component hashes.
+See [Ext build instructions](BUILDING_EXT.md).
 
 The upstream documentation below is retained for attribution and build context;
 its package name, signing identity, Polestar workflow and release URLs describe

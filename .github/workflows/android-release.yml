@@ -68,6 +68,16 @@ jobs:
           name: ds-forever-ext-apk
           path: dist/
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            app/build/test-results/
+            app/build/reports/tests/
+            dsforever/build/test-results/
+            dsforever/build/reports/tests/
+          if-no-files-found: ignore
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/ext-release.p12"
