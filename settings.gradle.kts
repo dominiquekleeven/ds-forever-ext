@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "DS-Forever"
+rootProject.name = "DS-Forever-Ext"
 include(":app")
 include(":dsforever")   // DS Forever fork: the companion inside the launcher

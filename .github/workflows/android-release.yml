@@ -1,0 +1,73 @@
+name: Android test release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*-ext.*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install pinned Android toolchain
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.1.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+      - name: Build pinned runtime prerequisites
+        run: bash tools/ci_bootstrap.sh
+      - name: Restore fork signing identity
+        env:
+          KEYSTORE: ${{ secrets.EXT_KEYSTORE_BASE64 }}
+          PASSWORD: ${{ secrets.EXT_KEYSTORE_PASSWORD }}
+        run: |
+          umask 077
+          test -n "$KEYSTORE"
+          test -n "$PASSWORD"
+          printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/ext-release.p12"
+      - name: Build signed APK
+        env:
+          WC_KEYSTORE: ${{ runner.temp }}/ext-release.p12
+          WC_KEYSTORE_PASS: ${{ secrets.EXT_KEYSTORE_PASSWORD }}
+          WC_KEY_ALIAS: ds-forever-ext
+          WC_KEY_PASS: ${{ secrets.EXT_KEYSTORE_PASSWORD }}
+        run: |
+          bash gradlew --no-daemon --no-configuration-cache --max-workers=2 \
+            -Dorg.gradle.parallel=false '-Dorg.gradle.jvmargs=-Xmx5g -Dfile.encoding=UTF-8' \
+            -Pkotlin.compiler.execution.strategy=in-process :app:assembleModernRelease
+      - name: Verify and package release
+        run: python3 tools/ci_package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ds-forever-ext-apk
+          path: dist/
+          if-no-files-found: error
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/ext-release.p12"
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ds-forever-ext-apk
+          path: dist
+      - name: Publish test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --prerelease \
+            --title "DS Forever Ext $GITHUB_REF_NAME" --notes-file RELEASE_EXT.md

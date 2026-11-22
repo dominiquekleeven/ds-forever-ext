@@ -11,8 +11,13 @@ APP=$(cd "$HERE/../.." && pwd)/app
 SRC=${1:-$(cd "$HERE/../../.." && pwd)/.deps/CascLib}/src
 SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-${LOCALAPPDATA:-}/Android/Sdk}}
 NDK=${ANDROID_NDK:-$SDK/ndk/27.2.12479018}
-BIN="$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin"
-CXX="$BIN/clang++.exe"; CC="$BIN/clang.exe"
+case "$(uname -s)" in
+    Linux*) HOST=linux-x86_64; EXE= ;;
+    Darwin*) HOST=darwin-x86_64; EXE= ;;
+    *) HOST=windows-x86_64; EXE=.exe ;;
+esac
+BIN="$NDK/toolchains/llvm/prebuilt/$HOST/bin"
+CXX="$BIN/clang++$EXE"; CC="$BIN/clang$EXE"
 T=--target=aarch64-linux-android29
 OBJ=$(mktemp -d "${TMP:-/tmp}/wc-casc-obj.XXXXXX")
 # our two patches go on a COPY of CascLib (downloads to the app's cache, read-only fallback): tools/harvest/patch_casclib.py
@@ -32,5 +37,5 @@ done
     -c "$HERE/casc_jni.cpp" -o "$OBJ/casc_jni.o"
 mkdir -p "$APP/src/main/jniLibs/arm64-v8a"
 "$CXX" $T -shared -static-libstdc++ -Wl,-soname,libcasc.so -Wl,--gc-sections -o "$APP/src/main/jniLibs/arm64-v8a/libcasc.so" "$OBJ"/*.o -lz -llog
-"$BIN/llvm-strip.exe" --strip-unneeded "$APP/src/main/jniLibs/arm64-v8a/libcasc.so"
+"$BIN/llvm-strip$EXE" --strip-unneeded "$APP/src/main/jniLibs/arm64-v8a/libcasc.so"
 ls -la "$APP/src/main/jniLibs/arm64-v8a/libcasc.so"

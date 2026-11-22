@@ -20,6 +20,11 @@ NINJA=${NINJA:-$(command -v ninja || echo "$VSCMAKE/Ninja/ninja.exe")}
     -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release -DRECAST_SOURCE="$RECAST"
 "$CMAKE" --build "$BUILD" --target interiors
 mkdir -p "$APP/src/main/jniLibs/arm64-v8a"
-"$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-strip.exe" --strip-unneeded -o "$APP/src/main/jniLibs/arm64-v8a/libinteriors.so" \
+case "$(uname -s)" in
+    Linux*) STRIP="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" ;;
+    Darwin*) STRIP="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip" ;;
+    *) STRIP="$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-strip.exe" ;;
+esac
+"$STRIP" --strip-unneeded -o "$APP/src/main/jniLibs/arm64-v8a/libinteriors.so" \
     "$BUILD/libinteriors.so"
 ls -la "$APP/src/main/jniLibs/arm64-v8a/libinteriors.so"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Keep LF line endings: GitHub Actions runs this script on Linux.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
