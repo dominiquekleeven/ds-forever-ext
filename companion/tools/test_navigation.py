@@ -21,8 +21,66 @@ def source(archive, name):
         return z.read(name).decode("utf-8")
 
 
+def enable_automatic_navigation(lua):
+    hub = (Path(__file__).resolve().parents[1] /
+           "app/src/main/assets/companion/addons/WowCompanionHub/Hub.lua").read_text()
+    start = hub.index("function hub.enableFocusedQuestNavigation()")
+    end = hub.index('\nf:SetScript("OnEvent"', start)
+    lua.execute(hub[start:end])
+
+
 @unittest.skipUnless(SPF.is_file() and QUESTIE.is_file(), "provide the pinned upstream ZIP inputs")
 class NavigationTest(unittest.TestCase):
+    def test_automatic_default_runs_once_and_preserves_later_opt_out(self):
+        lua = LuaRuntime()
+        lua.execute("hub = {}")
+        enable_automatic_navigation(lua)
+        lua.execute("""
+            hub.enableFocusedQuestNavigation()
+            assert(ShortestPathForeverDB == nil, 'do not create another addons saved table')
+            ShortestPathForever = {}
+            ShortestPathForeverDB = {focusedQuest=false, arrow=false, minimapLine=true, custom='keep'}
+            hub.enableFocusedQuestNavigation()
+            assert(ShortestPathForeverDB.focusedQuest == true)
+            assert(ShortestPathForeverDB.dsForeverExtPreviousFocusedQuest == false)
+            assert(ShortestPathForeverDB.arrow == false and ShortestPathForeverDB.custom == 'keep')
+            ShortestPathForeverDB.focusedQuest = false
+            hub.enableFocusedQuestNavigation()
+            assert(ShortestPathForeverDB.focusedQuest == false, 'later player opt-out must stand')
+            assert(ShortestPathForeverDB.dsForeverExtPreviousFocusedQuest == false)
+        """)
+
+    def test_actual_focused_quest_handler_routes_without_map_click_once_per_change(self):
+        lua = LuaRuntime()
+        lua.execute("""
+            hub = {}; questID = 10; routes = 0; owner = nil
+            ShortestPathForever = {}; ShortestPathForeverDB = {focusedQuest=false, journey=true}
+            C_SuperTrack = {GetSuperTrackedQuestID=function() return questID end}
+            C_Map = {}; Enum = {}; L = {}
+            ns = {db=ShortestPathForeverDB, JourneyOwner=function() return owner end,
+                  JourneyToTrackedQuest=function() routes=routes+1 end}
+        """)
+        enable_automatic_navigation(lua)
+        text = source(SPF, "ShortestPathForever/Journey/JourneyInput.lua")
+        start = text.index("local focusedQuest")
+        end = text.index("-- The journey key is this addon's gesture", start)
+        lua.execute(text[start:end])
+        lua.execute("""
+            hub.enableFocusedQuestNavigation()
+            ns.FocusedTrackingReset()
+            questID = 42
+            ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED')
+            assert(routes == 1, 'focused quest must start guidance without a click')
+            ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED')
+            assert(routes == 1, 'unchanged focus must not plan twice')
+            questID = 43; ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED'); assert(routes == 2)
+            owner = 'Other guide'
+            questID = 44; ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED'); assert(routes == 2)
+            owner = nil; ns.db.focusedQuest = false
+            questID = 45; ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED'); assert(routes == 2)
+            questID = 0; ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED'); assert(routes == 2)
+        """)
+
     def test_pins_load_list_and_defaults(self):
         self.assertEqual(20_019_152, SPF.stat().st_size)
         self.assertEqual("09a54bb8ed17d4cff74211321202b4c66de180a7e9e53f5713a7ec52ff993ef9",

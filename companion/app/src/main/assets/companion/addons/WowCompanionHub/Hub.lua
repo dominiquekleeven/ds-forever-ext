@@ -1269,7 +1269,17 @@ if byeOk then
     end)
 end
 
+-- User-requested default, once after the navigation add-on loads its saved settings; later opt-outs stand.
+function hub.enableFocusedQuestNavigation()
+    local db = ShortestPathForeverDB
+    if type(db) ~= "table" or type(ShortestPathForever) ~= "table" or db.dsForeverExtAutoQuest == 1 then return end
+    db.dsForeverExtPreviousFocusedQuest = db.focusedQuest
+    db.focusedQuest = true
+    db.dsForeverExtAutoQuest = 1
+end
+
 f:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then hub.enableFocusedQuestNavigation() end
     setup()
     if event == "PLAYER_REGEN_ENABLED" and hub.pending then apply() end
     if RECHECK[event] then
