@@ -548,7 +548,10 @@ class Light8Test {
     @Test fun theOneLineTipBeforePlayOnLight8() {
         assertEquals(SetupFlow.PLAY_TIP_8GB, SetupFlow.screen(ready.copy(light8Tip = true)).line)
         assertEquals("", SetupFlow.screen(ready).line)
-        assertEquals("a pop-up up: its own words only", "", SetupFlow.screen(ready.copy(light8Tip = true, polestarAsk = true)).line)
+        assertEquals("Ext never shows the retired Polestar prompt", SetupFlow.PLAY_TIP_8GB,
+            SetupFlow.screen(ready.copy(light8Tip = true, polestarAsk = true)).line)
+        assertEquals("a real pop-up up: its own words only", "",
+            SetupFlow.screen(ready.copy(light8Tip = true, appUpdate = "test")).line)
         assertEquals("Play not ready: the step's line", "Checking the game art",
             SetupFlow.screen(ready.copy(light8Tip = true, art = SetupFlow.Art.IDLE)).line)
         assertTrue(text("SetupBridge.kt").contains("light8Tip = runCatching { DeviceTier.light8() }.getOrDefault(false)"))
