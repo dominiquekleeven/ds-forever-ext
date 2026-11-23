@@ -173,8 +173,12 @@ class PerformanceTileModelTest {
         // terse: the Restart line and the hourglass say a change waits, no status line repeats it
         assertEquals("", M.status(M.LIMIT, PerformanceTileModel.State(limit = 60, limitWaits = true)))
         assertEquals("", M.status(M.FG, PerformanceTileModel.State(hasDll = true, fgOn = true, fgWaits = true, lastPick = "x")))
-        assertEquals(1, M.lines(M.LIMIT, PerformanceTileModel.State(limit = 60))[0].chosen)
-        assertEquals(listOf("40", "60", "Off"), M.lines(M.LIMIT, PerformanceTileModel.State())[0].words)
+        assertEquals(2, M.lines(M.LIMIT, PerformanceTileModel.State(limit = 60))[0].chosen)
+        assertEquals(listOf("30", "40", "60", "Off"), M.lines(M.LIMIT, PerformanceTileModel.State())[0].words)
+        assertEquals(0, M.lines(M.LIMIT, PerformanceTileModel.State())[0].chosen)
+        assertEquals("30 game fps by default", M.status(M.LIMIT, PerformanceTileModel.State(limitNote = true)))
+        assertEquals("Choose your Lossless.dll to enable generation", M.status(M.FG, PerformanceTileModel.State()))
+        assertEquals("30 game fps · 60 output fps target", M.status(M.FG, PerformanceTileModel.State(hasDll = true)))
         // a launcher-menu value: none lit, the status line says where it came from
         assertEquals(-1, M.lines(M.LIMIT, PerformanceTileModel.State(limit = 45))[0].chosen)
         assertEquals("45 fps, set in the launcher's menu", M.status(M.LIMIT, PerformanceTileModel.State(limit = 45)))
@@ -268,6 +272,9 @@ class PerformanceTileModelTest {
 
     /** the band's boxes: every button the 110 px touch floor; an action's one button no wider than 300 px */
     @Test fun bandBoxes() {
+        val limit = M.band(16f, 0f, 1208f, M.lines(M.LIMIT, PerformanceTileModel.State()))
+        assertEquals(4, limit.lines.first().buttons.size)
+        assertTrue(limit.lines.first().buttons.all { it.w >= 110f && it.h >= 110f })
         val lines = M.lines(M.FG, PerformanceTileModel.State(hasDll = true, fgOn = true, fgWaits = true))
         val b = M.band(16f, 0f, 1208f, lines)
         assertEquals(lines.size, b.lines.size)

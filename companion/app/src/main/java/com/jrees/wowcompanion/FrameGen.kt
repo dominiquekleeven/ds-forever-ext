@@ -3,6 +3,7 @@ package com.jrees.wowcompanion
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
+import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
 import java.util.Locale
@@ -12,7 +13,7 @@ import java.util.Locale
  * and GameNative's native frame-generation pipeline; both need Lossless Scaling's Lossless.dll, which is commercial: it is NEVER
  * shipped, bundled, downloaded or put in git. The player picks their own copy (Settings > Frame generation), it is copied into this
  * app's PRIVATE storage ([dllFile]) and checked to be a PE DLL. The launcher reads [snapshot] at each game start
- * (LsfgVkManager.applyDsForever); Off (the default) or no DLL = the launch is exactly as without this feature.
+ * (LsfgVkManager.applyDsForever); Off or no DLL leaves generation disabled. The desired default is 30 game fps with 2x generation.
  */
 object FrameGen {
     const val DLL_NAME = "Lossless.dll"
@@ -38,34 +39,38 @@ object FrameGen {
     @Volatile var lastPick: String = ""
         private set
 
-    fun init(c: Context) {
+    @Synchronized fun init(c: Context) {
         if (prefs == null) prefs = c.applicationContext.getSharedPreferences("framegen", Context.MODE_PRIVATE)
         if (dir == null) dir = File(c.applicationContext.filesDir, "framegen")
+        val p = prefs ?: return
+        if (!p.getBoolean(KEY_DEFAULTS, false)) {
+            // Keep absence as absence in the private recovery record; save it atomically with the one-time update.
+            val before = JSONObject(p.all.filterKeys { it in setOf(KEY_LIMIT, KEY_ASK, KEY_MIGRATED, KEY_NOTE,
+                "enabled", "multiplier", "flowScale", "performance") }).toString()
+            check(p.edit().putString(KEY_BEFORE, before).putBoolean(KEY_DEFAULTS, true)
+                .putBoolean(KEY_MIGRATED, true).putBoolean(KEY_NOTE, true).putInt(KEY_ASK, LIMIT_DEFAULT)
+                .putBoolean("enabled", true).putInt("multiplier", 2).commit()) { "Couldn't save frame generation defaults" }
+        }
     }
 
-    // ---- THE FRAME LIMIT (board n-fps-40; the user: "I want the 40 fps limiter to be set specifically in the game native settings,
-    // not wow"). It IS the launcher's own limiter (GameNative's quick-menu FPS limit: XServerScreen paces the renderer, the Present
-    // extension and the SHM path; with frame generation on, the lsfg-vk layer takes it as its base fps, so it limits the GAME's
-    // frames: 40 x2 = 80 shown). It lives in the container's fpsLimiterEnabled / fpsLimiterTarget extras. ONCE, at the first game start
-    // of 1.0.8, every container is set to 40, new and existing alike (the user's pick: "Set once on update"; [LimitMigration]); after
-    // that the player's own value sticks. DS Forever's Settings row shows the container's
-    // value ([noteContainer], from the launcher at each start and from the quick menu) and a pick there is written into the container
-    // at the next game start ([takeAsk]). No game CVar, nothing in the game's files.
+    // The launcher's base-game cap, not a game CVar or an output-FPS cap. The ext.2 migration queues 30 once;
+    // later Settings picks apply at the next launch, and quick-menu picks apply through the existing runtime path.
 
-    /** Settings' choices: 40, 60, Off (0); the quick menu may hold any other value, shown as it is */
-    val LIMITS = listOf(40, 60, 0)
-    /** the one-time 1.0.8 limit, for every container */
-    const val LIMIT_MIGRATED = 40
+    /** Settings' base-game caps; the quick menu may hold any other value, shown as it is. */
+    val LIMITS = listOf(30, 40, 60, 0)
+    const val LIMIT_DEFAULT = 30
+    const val LIMIT_MIGRATED = LIMIT_DEFAULT
     /** the launcher's limit for a container that never set one (XServerScreen: on, 60) */
     const val LIMIT_ENGINE_DEFAULT = 60
     private const val KEY_LIMIT = "fpsLimitContainer"
     private const val KEY_ASK = "fpsLimitAsk"
     private const val KEY_MIGRATED = "fpsLimit108"
     private const val KEY_NOTE = "fpsLimitNote"
+    private const val KEY_DEFAULTS = "defaults30x2Ext2"
+    private const val KEY_BEFORE = "defaults30x2Ext2Before"
 
     /**
-     * THE ONE-TIME 1.0.8 MIGRATION: runs [write] with [LIMIT_MIGRATED] the first time only, then never again ([isDone] / [markDone]
-     * keep the flag). Pure, so the off-device test proves "exactly once".
+     * Legacy launch migration, retained for old callers. [init] marks it done so it cannot override the ext.2 defaults or later picks.
      */
     class LimitMigration(private val isDone: () -> Boolean, private val markDone: () -> Unit) {
         /** true = it ran now */
@@ -84,7 +89,7 @@ object FrameGen {
             { p.edit().putBoolean(KEY_MIGRATED, true).putBoolean(KEY_NOTE, true).apply() }).run(write)
     }
 
-    /** Settings says once why the limit is 40 (until the player picks a limit there) */
+    /** Settings notes the new default until the player picks a limit. */
     val limitNote: Boolean get() = prefs?.getBoolean(KEY_NOTE, false) ?: false
 
     /** the container's limit from its extras (absent = the launcher's own default: on, 60); 0 = Off */
@@ -99,7 +104,7 @@ object FrameGen {
         get() {
             val ask = prefs?.getInt(KEY_ASK, -1) ?: -1
             if (ask in LIMITS) return ask
-            return (prefs?.getInt(KEY_LIMIT, LIMIT_ENGINE_DEFAULT) ?: LIMIT_ENGINE_DEFAULT).coerceAtLeast(0)
+            return (prefs?.getInt(KEY_LIMIT, LIMIT_DEFAULT) ?: LIMIT_DEFAULT).coerceAtLeast(0)
         }
 
     /** Settings' pick: written into the container at the next game start */
@@ -137,14 +142,18 @@ object FrameGen {
     fun onChange(l: () -> Unit) { listeners.add(l) }
     private fun changed() { for (l in listeners.toList()) l() }
     /** Reset settings (ResetRun) removed saved values: the rows read them again */
-    fun resetDone() = changed()
+    fun resetDone() {
+        if (prefs?.contains(KEY_LIMIT) == false && prefs?.contains(KEY_ASK) == false)
+            prefs?.edit()?.putInt(KEY_ASK, LIMIT_DEFAULT)?.apply()
+        changed()
+    }
 
     /** the private copy (null before [init]); exists only after a good pick */
     fun dllFile(): File? = dir?.let { File(it, DLL_NAME) }
     fun hasDll(): Boolean = dllFile()?.isFile == true
 
     var enabled: Boolean
-        get() = prefs?.getBoolean("enabled", false) ?: false
+        get() = prefs?.getBoolean("enabled", true) ?: true
         set(v) { if (v != enabled) { prefs?.edit()?.putBoolean("enabled", v)?.apply(); changed() } }
 
     var multiplier: Int

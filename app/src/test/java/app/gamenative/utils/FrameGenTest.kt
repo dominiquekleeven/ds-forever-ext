@@ -33,7 +33,7 @@ class FrameGenTest {
         return b
     }
 
-    private fun tempDir(): File = Files.createTempDirectory("framegen").toFile()
+    private fun tempDir(): File = Files.createTempDirectory(File("build/framegen-tests").apply { mkdirs() }.toPath(), "dll").toFile()
 
     // ---- the DLL check and copy
 
@@ -110,6 +110,7 @@ class FrameGenTest {
     }
 
     @Test fun theFrameLimitIsTheLaunchersOwnLimiter() {      // board n-fps-40: the container's limiter extras, no game CVar
+        assertEquals(mapOf("fpsLimiterEnabled" to "true", "fpsLimiterTarget" to "30"), LsfgVkManager.dsForeverLimitExtras(30))
         assertEquals(mapOf("fpsLimiterEnabled" to "true", "fpsLimiterTarget" to "40"), LsfgVkManager.dsForeverLimitExtras(40))
         assertEquals(mapOf("fpsLimiterEnabled" to "true", "fpsLimiterTarget" to "60"), LsfgVkManager.dsForeverLimitExtras(60))
         assertEquals(mapOf("fpsLimiterEnabled" to "false"), LsfgVkManager.dsForeverLimitExtras(0))
@@ -118,9 +119,10 @@ class FrameGenTest {
     // ---- conf.toml
 
     @Test fun configCarriesTheSettings() {
-        val toml = LsfgVkManager.buildConfigToml("/x/Lossless.dll", true, 2, 0.8f, true, 0, "mailbox")
+        val toml = LsfgVkManager.buildConfigToml("/x/Lossless.dll", true, 2, 0.8f, true, 30, "mailbox")
         assertTrue(toml, toml.contains("dll = \"/x/Lossless.dll\""))
         assertTrue(toml, toml.contains("multiplier = 2"))
+        assertTrue(toml, toml.contains("fps_limit = 30"))
         assertTrue(toml, toml.contains("flow_scale = 0.80"))
         assertTrue(toml, toml.contains("performance_mode = true"))
         assertTrue(toml, toml.contains("experimental_present_mode = \"mailbox\""))
@@ -131,6 +133,17 @@ class FrameGenTest {
         assertTrue(toml, toml.contains("multiplier = 1"))
         assertTrue(toml, toml.contains("performance_mode = false"))
         assertFalse(LsfgVkManager.buildConfigToml(null, false, 1, 0.8f, false, 0, "fifo").contains("[[game]]"))
+    }
+
+    @Test fun pacingKeepsTheGameCapSeparateFromTheOutputTarget() {
+        assertEquals(30, LsfgVkManager.presentFpsLimit(30, true, true))
+        assertEquals(0, LsfgVkManager.presentFpsLimit(30, true, false))
+        assertEquals(30, LsfgVkManager.presentFpsLimit(30, false, true))
+        assertEquals(30, LsfgVkManager.presentFpsLimit(30, false, false))
+        assertEquals(60f, LsfgVkManager.nativeOutputTarget(30, 2, 120f), 0f)
+        assertEquals(50f, LsfgVkManager.nativeOutputTarget(30, 2, 50f), 0f)
+        assertEquals(120f, LsfgVkManager.nativeOutputTarget(0, 2, 120f), 0f)
+        assertEquals(90f, LsfgVkManager.nativeOutputTarget(30, 3, 120f), 0f)
     }
 
     // ---- which rows show, and when "Restart the game" does (the user: "hide the other settings until its chosen", "a restart button")

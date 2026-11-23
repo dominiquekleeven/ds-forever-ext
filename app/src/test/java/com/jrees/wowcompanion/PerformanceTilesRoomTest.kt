@@ -425,10 +425,10 @@ class PerformanceTilesRoomTest {
         open(r, PerformanceTileModel.LIMIT)
         assertEquals(PerformanceTileModel.LIMIT, r.perf.openTile)
         val b = bandButtons(r)
-        assertEquals("40 / 60 / Off; unavailable WoW FPS toggle has no cursor stop", 3, b.size)
+        assertEquals("30 / 40 / 60 / Off; unavailable WoW FPS toggle has no cursor stop", 4, b.size)
         for (x in b) assertTrue(x.height() >= 110f)
         val was = FrameGen.fpsLimit
-        val k = if (was == 60) 0 else 1
+        val k = if (was == 60) 0 else 2
         tap(r.perf, b[k].centerX(), b[k].centerY()); lay(r)
         assertEquals(FrameGen.LIMITS[k], FrameGen.fpsLimit)
         FrameGen.askLimit(was)
@@ -440,7 +440,7 @@ class PerformanceTilesRoomTest {
         tap(r.perf, c.centerX(), c.centerY()); lay(r)
         assertEquals("the host's picker", 1, chose)
         // with a copy: On / Off and Lossless.dll (a new copy with generation Off too); On brings Multiplier, Flow scale, Performance mode
-        dll(true); lay(r)
+        FrameGen.enabled = false; dll(true); lay(r)
         assertEquals(2 + 1, bandButtons(r).size)
         val on = bandButtons(r)[0]
         tap(r.perf, on.centerX(), on.centerY()); lay(r)
@@ -463,6 +463,23 @@ class PerformanceTilesRoomTest {
         // a tap outside the band closes it
         tap(r.perf, 600f, r.perf.height - 20f); lay(r)
         assertNull(r.perf.openTile)
+    }
+
+    @Test fun theControllerCanPickAllFourBaseCapsIncludingThirty() {
+        val r = room(); hold(r)
+        press(r, "PADDDOWN"); press(r, "PAD1"); press(r, "PADDDOWN")
+        assertEquals(PerformanceTileModel.LIMIT, r.perf.openTile)
+        for ((i, cap) in FrameGen.LIMITS.withIndex()) {
+            val expected = RectF(bandButtons(r)[i]).apply { offset(0f, contentTop(r, r.perf)) }
+            assertEquals("controller stop for $cap", expected, r.pad.focusBox())
+            press(r, "PAD1")
+            assertEquals(cap, FrameGen.fpsLimit)
+            if (i < FrameGen.LIMITS.lastIndex) press(r, "PADDRIGHT")
+        }
+        // Touch uses the same four-button indexing, including the new first choice.
+        val thirty = bandButtons(r).first()
+        tap(r.perf, thirty.centerX(), thirty.centerY()); lay(r)
+        assertEquals(30, FrameGen.fpsLimit)
     }
 
     /** Restart only while a change waits for the running game; it calls the host's restart */

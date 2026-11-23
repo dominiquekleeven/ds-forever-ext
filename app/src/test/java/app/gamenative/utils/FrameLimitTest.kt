@@ -6,7 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The frame limit (board n-fps-40), off-device: the one-time 1.0.8 migration to 40, the container's limit, the restart rule */
+/** The base-game frame limit: legacy migration guard, choices, container parsing and restart rule. */
 class FrameLimitTest {
     @Test fun theMigrationRunsExactlyOnce() {
         var done = false
@@ -15,7 +15,7 @@ class FrameLimitTest {
         assertTrue(m.run { written.add(it) })            // the first start of 1.0.8: every container to 40
         assertFalse(m.run { written.add(it) })           // the next start: nothing
         assertFalse(m.run { written.add(it) })
-        assertEquals(listOf(40), written)
+        assertEquals(listOf(30), written)
     }
 
     @Test fun aMigrationDoneBeforeNeverRuns() {
@@ -24,10 +24,10 @@ class FrameLimitTest {
         assertTrue(written.isEmpty())
     }
 
-    @Test fun theMigratedLimitIsFortyAndASettingsChoice() {
-        assertEquals(40, FrameGen.LIMIT_MIGRATED)
+    @Test fun theDefaultIsThirtyAndASettingsChoice() {
+        assertEquals(30, FrameGen.LIMIT_MIGRATED)
         assertTrue(FrameGen.LIMIT_MIGRATED in FrameGen.LIMITS)
-        assertEquals(listOf(40, 60, 0), FrameGen.LIMITS)
+        assertEquals(listOf(30, 40, 60, 0), FrameGen.LIMITS)
     }
 
     @Test fun theContainersLimitFromItsExtras() {

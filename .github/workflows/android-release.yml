@@ -47,7 +47,8 @@ jobs:
             --tests '*BottomRouteShotsTest' \
             --tests '*KeyboardRepeatShiftTest' --tests '*XInputQueueTest' --tests '*XInputHoldTest' --tests '*XInputWiringTest' \
             --tests '*GameSessionServiceTest' --tests '*WowLaunchSwitchTest' --tests '*FirstRunArtTest' \
-            --tests '*CrashStateLineTest' --tests '*WowCdnStreamTest' --tests '*HomeMapControlsShotsTest'
+            --tests '*CrashStateLineTest' --tests '*WowCdnStreamTest' --tests '*HomeMapControlsShotsTest' \
+            --tests '*FrameGen*Test' --tests '*FrameLimitTest'
       - name: Test Questie replacement and Ext update channel
         if: ${{ !cancelled() }}
         env:
@@ -76,7 +77,8 @@ jobs:
             --tests '*HomeLayoutRulesTest' --tests '*HomeLayoutStoreTest' --tests '*HomeEditModelTest' \
             --tests '*RealmKeyTest' --tests '*LoadGateTest' --tests '*GameVideoMemoryTest' \
             --tests '*Light8Test' --tests '*Light8UnchangedTest' --tests '*FirstRunFolderTest' \
-            --tests '*CdnHttpsTest' --tests '*InstallFixesTest' --tests '*MapHoldClaimTest'
+            --tests '*CdnHttpsTest' --tests '*InstallFixesTest' --tests '*MapHoldClaimTest' \
+            --tests '*ResetPlanTest' --tests '*ResetFlowTest'
       - name: Test bundled Lua and add-on manifest
         if: ${{ !cancelled() }}
         env:

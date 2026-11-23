@@ -18,7 +18,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class FrameGenLaunchEnvTest {
     private fun pe(dll: Boolean) = FrameGenTest.peBytes(dll)
-    private fun tempDir(): File = Files.createTempDirectory("framegen").toFile()
+    private fun tempDir(): File = Files.createTempDirectory(File("build/framegen-tests").apply { mkdirs() }.toPath(), "env").toFile()
 
     // ---- the launch env
 

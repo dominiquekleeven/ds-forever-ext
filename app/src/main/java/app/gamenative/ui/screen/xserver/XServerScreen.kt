@@ -677,18 +677,19 @@ fun XServerScreen(
     }
 
     fun applyFpsLimiterToEngines(limit: Int) {
-        // With LSFG active the layer owns ALL pacing (vsync-locked via
+        // With legacy LSFG active the layer owns ALL pacing (vsync-locked via
         // vsync.txt) and presents at limit * multiplier. Both the renderer's
         // SurfaceControl frame-rate hint and the PresentExtension's scheduled
         // idle-release pacing must stay off: the hint would clamp the display
         // to the base rate, and the extension's Choreographer-scheduled pixmap
         // releases mix stale pixmaps under multiplied present traffic
         // (measured as constant multi-exposure ghosting on the X11/turnip
-        // present path).
+        // present path). Native generation is after X11 Present: keep its base-game idle pacing, but not the output hint.
         xServerView?.setFrameRateLimit(if (isLsfgAvailable && lsfgMultiplier >= 2) 0 else limit)
         xServerView?.getxServer()
             ?.getExtension<PresentExtension>(PresentExtension.MAJOR_OPCODE.toInt())
-            ?.setFrameRateLimit(if (isLsfgAvailable && lsfgMultiplier >= 2) 0 else limit)
+            ?.setFrameRateLimit(LsfgVkManager.presentFpsLimit(limit, isLsfgAvailable && lsfgMultiplier >= 2,
+                LsfgVkManager.isNativeBackend(container)))
         // Not disarmed with LSFG: the layer only multiplies Vulkan-swapchain
         // presents, so SHM-presenting games never pass through it and would
         ShmFramePacer.setFrameRateLimit(limit)
@@ -1903,7 +1904,7 @@ fun XServerScreen(
             }
             val xServerView = xServerViewInstance.apply {
                 xServerView = this
-                setFrameRateLimit(if (fpsLimiterEnabled) fpsLimiterTarget else 0)
+                applyFpsLimiterToEngines(effectiveFpsLimit())
                 val renderer = this.renderer
                 if (!useGLRenderer && renderer is VulkanRenderer) {
                     renderer.setFrameGenerationArmed(isLsfgAvailable)

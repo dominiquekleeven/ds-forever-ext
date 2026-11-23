@@ -34,7 +34,7 @@ object SettingsPreview {
         val spellTap: Boolean = true, val spellPickA: Boolean = true,
         val classTapL: Boolean = false, val classPickAL: Boolean = false, val classTapR: Boolean = false, val classPickAR: Boolean = false,
         val miniOutYd: Int = 80, val miniInYd: Int = 60, val quickChat: Boolean = true,
-        val fpsLimit: Int = 40, val frameGen: Boolean = false, val multiplier: Int = 2, val flow: Float = 0.8f, val indoorBuild: Boolean = true,
+        val fpsLimit: Int = 30, val frameGen: Boolean = true, val multiplier: Int = 2, val flow: Float = 0.8f, val indoorBuild: Boolean = true,
         // 2026-11-13 (the user: "a lot of these new options and settings need visuals"): the extras row, the cast bar, the world map, the
         // Controller tab's helpers. [castBar] = CastStripModel.Side's index (Off, Left, Right, Both); [autoShot] = GameUi.SHOT_WORDS' index
         val clockHearth: Boolean = true, val clockTeleport: Boolean = true, val clockGold: Boolean = true, val clockBags: Boolean = true,
@@ -826,10 +826,10 @@ object SettingsPreview {
 
     private fun frameLimit(c: Canvas, r: RectF, s: State, t: Float, live: Live?) {
         val icon = mover(live)
-        val lanes = listOf(40, 60, 0)
+        val lanes = FrameGen.LIMITS
         val x0 = r.left + 92f; val x1 = r.right - 20f
         for ((i, fps) in lanes.withIndex()) {
-            val top = r.top + 14f + i * ((r.height() - 110f) / 3f)
+            val top = r.top + 14f + i * ((r.height() - 110f) / lanes.size)
             val on = fps == s.fpsLimit
             choiceRow(c, r, top, 96f, on)
             val y = top + 66f

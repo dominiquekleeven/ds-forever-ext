@@ -56,10 +56,10 @@ object PerformanceTileModel {
 
     /** what the tiles show and their lines offer, read once per draw from FrameGen / Settings / the bake's status */
     data class State(
-        val limit: Int = 40,
+        val limit: Int = FrameGen.LIMIT_DEFAULT,
         /** a restart would change the running game's frame limit / frame generation (the game runs, no restart under way) */
         val limitWaits: Boolean = false, val fgWaits: Boolean = false,
-        val hasDll: Boolean = false, val fgOn: Boolean = false, val multiplier: Int = 2, val flow: Float = FrameGen.FLOW_DEFAULT,
+        val hasDll: Boolean = false, val fgOn: Boolean = true, val multiplier: Int = 2, val flow: Float = FrameGen.FLOW_DEFAULT,
         val perfMode: Boolean = true, val lastPick: String = "", val limitNote: Boolean = false,
         val lighter: Boolean = false, val lighterFixed: Boolean = false, val lowGfx: Boolean = false, val mapFull: Boolean = false,
         /** Settings > Performance > Map style when zoomed out: true = Terrain (the default), false = Painted */
@@ -195,12 +195,14 @@ object PerformanceTileModel {
         LIMIT -> when {
             s.limitWaits || s.fgWaits -> ""
             s.limit > 0 && s.limit !in FrameGen.LIMITS -> "${s.limit} fps, set in the launcher's menu"
-            s.limitNote && s.limit == FrameGen.LIMIT_MIGRATED -> "Set to 40 for battery and heat"
+            s.limitNote && s.limit == FrameGen.LIMIT_DEFAULT -> "30 game fps by default"
             else -> ""
         }
         FG -> when {
             s.limitWaits || s.fgWaits -> ""
             s.lastPick.isNotEmpty() -> s.lastPick
+            !s.hasDll -> "Choose your Lossless.dll to enable generation"
+            s.generating && s.limit > 0 -> "${s.limit} game fps · ${s.limit * s.multiplier} output fps target"
             else -> ""
         }
         MEM -> when {

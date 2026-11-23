@@ -38,7 +38,7 @@ package com.jrees.wowcompanion
  *               NEVER    browserLogin, windowsId (+ windowsIdRan*), gameAccountAsk, gameAccountPick (the sign-in), polestarGuide, polestarOffBoot,
  *                        questTracking* (Polestar), theme_custom (the player's own made theme: Classic comes back, the made one stays),
  *                        swapScreensFails, settingsTab, the migration marks
- *  framegen     SETTINGS enabled, multiplier, flowScale, performance, fpsLimitContainer, fpsLimitAsk   NEVER fpsLimit108, fpsLimitNote
+ *  framegen     SETTINGS enabled, multiplier, flowScale, performance, fpsLimitContainer, fpsLimitAsk   NEVER migration flags / before-state
  *  gameui       SETTINGS mode.<element>, sw.pmode, castbar.hide   LAYOUTS (per char) sw.<part>.<who>, hud.<who>, prdy./prdw./prds.<who>,
  *                        mt.<part>.<who>
  *  cast         SETTINGS buttonLayout, abxyLocation
@@ -167,7 +167,7 @@ object ResetPlan {
             "polestarGuide", "polestarOffBoot", "questTracking", "questTrackingSafePath", "questTrackingPolestar1112", "questTrailRetire1112",
             "theme_custom", "swapScreensFails", "settingsTab"),
         exact("framegen", Kind.SETTINGS, "enabled", "multiplier", "flowScale", "performance", "fpsLimitContainer", "fpsLimitAsk"),
-        exact("framegen", null, "fpsLimit108", "fpsLimitNote"),
+        exact("framegen", null, "fpsLimit108", "fpsLimitNote", "defaults30x2Ext2", "defaults30x2Ext2Before"),
         exact("gameui", Kind.SETTINGS, "sw.pmode", "castbar.hide"),
         char("gameui", Kind.SETTINGS, "mode."),
         char("gameui", Kind.LAYOUTS, "sw.*.", "hud.", "prdy.", "prdw.", "prds.", "mt.*."),
