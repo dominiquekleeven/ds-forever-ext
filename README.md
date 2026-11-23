@@ -3,6 +3,7 @@
 Test fork of [DS Forever](https://github.com/Jreese702/DS-Forever) for AYN Thor.
 Adds saved Adrenotools driver ZIP selection (Turnip, Qualcomm and other compatible
 packages), a system-driver option, and replaces Polestar with Questie.
+Ext.3 adds WoW's Ctrl+R counter toggle and separate measured Game/Output FPS in the performance HUD.
 
 **[Download the test APK](https://github.com/dominiquekleeven/ds-forever-ext/releases)** · [Test instructions and limits](RELEASE_EXT.md)
 

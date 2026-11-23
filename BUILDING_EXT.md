@@ -47,8 +47,9 @@ variables are supplied. Do not install a debug build over a signed release.
 
 ## Release checks
 
-The workflow runs driver import/selection tests, Questie migration and menu tests,
-Ext version/update tests, Lua 5.1 compilation and the add-on manifest check. It
+The workflow runs driver import/selection tests, independent FPS measurement and
+counter-action tests, Questie migration and menu tests, Ext version/update tests,
+Lua 5.1 compilation and the add-on manifest check. It
 also checks APK signing, package identity, runtime archive hashes, required native
 libraries, post-R8 native callbacks and the upstream game-art exclusion gate.
 

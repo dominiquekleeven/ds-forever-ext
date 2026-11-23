@@ -822,15 +822,11 @@ fun XServerScreen(
         val hud = PerformanceHudView(
             context = context,
             fpsProvider = {
-                val raw = frameRating?.currentFPS ?: 0f
-                if (isLsfgAvailable && lsfgMultiplier >= 2) {
-                    // Only trust the layer's own measurement; multiplying raw
-                    // fabricates fps for games the layer never attaches to
-                    // (SHM-presenting games have no Vulkan swapchain).
-                    LsfgVkManager.readMeasuredFps(container) ?: raw
-                } else {
-                    raw
-                }
+                LsfgVkManager.readMeasuredFps(container)
+            },
+            gameFpsProvider = {
+                if (com.jrees.wowcompanion.GameInput.live())
+                    com.jrees.wowcompanion.GameFps.read(android.os.SystemClock.elapsedRealtime()) else null
             },
             initialConfig = performanceHudConfig,
             initialCompactMode = PrefManager.performanceHudCompactMode,
@@ -1738,6 +1734,8 @@ fun XServerScreen(
                     Lifecycle.Event.ON_PAUSE -> {
                         Timber.d("Pausing PerformanceHudView for lifecycle event: $event")
                         hud.pause()
+                        LsfgVkManager.resetFps()
+                        com.jrees.wowcompanion.GameFps.reset()
                     }
                     Lifecycle.Event.ON_RESUME -> {
                         Timber.d("Resuming PerformanceHudView for lifecycle event: $event")

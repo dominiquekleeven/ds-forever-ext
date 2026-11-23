@@ -47,9 +47,10 @@ import kotlinx.coroutines.withContext
  */
 class PerformanceHudView(
     context: Context,
-    private val fpsProvider: () -> Float,
+    private val fpsProvider: () -> Float?,
     initialConfig: PerformanceHudConfig = PerformanceHudConfig(),
     initialCompactMode: Boolean = false,
+    private val gameFpsProvider: () -> Float? = { null },
 ) : FrameLayout(context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var updateJob: Job? = null
@@ -92,6 +93,7 @@ class PerformanceHudView(
         graphColor = 0xFF42A5F5.toInt(),
         graphScaleMode = GraphScaleMode.PERCENT_100,
     )
+    private val gameFpsMetric = createMetricViews(MetricId.GAME_FPS, 0xFF4CAF50.toInt())
     private val gpuMetric = createMetricViews(
         id = MetricId.GPU,
         textColor = 0xFFEF5350.toInt(),
@@ -110,6 +112,7 @@ class PerformanceHudView(
     private val tuneMetric = createMetricViews(MetricId.TUNE, 0xFFCE93D8.toInt())
 
     private val allMetrics = listOf(
+        gameFpsMetric,
         fpsMetric,
         cpuMetric,
         gpuMetric,
@@ -203,10 +206,8 @@ class PerformanceHudView(
 
         updateJob = scope.launch {
             while (isActive) {
-                val rawFps = fpsProvider()
-                val currentFps = if (rawFps.isFinite()) rawFps.coerceAtLeast(0f) else 0f
                 val snapshot = withContext(Dispatchers.IO) {
-                    collectSnapshot(currentFps)
+                    collectSnapshot(fpsProvider()?.takeIf { it.isFinite() && it >= 0 })
                 }
                 renderSnapshot(snapshot)
                 delay(UPDATE_INTERVAL_MS)
@@ -301,7 +302,7 @@ class PerformanceHudView(
         }
     }
 
-    private fun collectSnapshot(currentFps: Float): HudSnapshot {
+    private fun collectSnapshot(currentFps: Float?): HudSnapshot {
         val cpuPercent = cpuSampler.sample()?.percent
         val gpuPercent = gpuSampler.sample()?.percent
         val batterySnapshot = collectBatterySnapshot()
@@ -309,7 +310,8 @@ class PerformanceHudView(
             fpsValue = currentFps,
             cpuValue = cpuPercent?.toFloat(),
             gpuValue = gpuPercent?.toFloat(),
-            fps = String.format(Locale.US, "FPS %.1f", currentFps),
+            fps = com.jrees.wowcompanion.GameFps.label("Output", currentFps) + " (presents)",
+            gameFps = com.jrees.wowcompanion.GameFps.label("Game", gameFpsProvider()),
             cpu = cpuPercent?.let { "CPU $it%" },
             gpu = gpuPercent?.let { "GPU $it%" },
             ram = "RAM ${readUsedRamText()}",
@@ -410,6 +412,7 @@ class PerformanceHudView(
 
     private fun applySnapshotText(snapshot: HudSnapshot) {
         updateMetricText(fpsMetric, snapshot.fps)
+        updateMetricText(gameFpsMetric, snapshot.gameFps)
         updateMetricText(cpuMetric, snapshot.cpu)
         updateMetricText(gpuMetric, snapshot.gpu)
         updateMetricText(ramMetric, snapshot.ram)
@@ -433,6 +436,7 @@ class PerformanceHudView(
     private fun refreshVisibleMetrics() {
         val visibleMetrics = buildList {
             addMetricIfVisible(fpsMetric, config.showFrameRate, config.showFrameRateGraph)
+            addMetricIfVisible(gameFpsMetric, config.showFrameRate)
             addMetricIfVisible(cpuMetric, config.showCpuUsage, config.showCpuUsageGraph)
             addMetricIfVisible(gpuMetric, config.showGpuUsage, config.showGpuUsageGraph)
             addMetricIfVisible(ramMetric, config.showRamUsage)

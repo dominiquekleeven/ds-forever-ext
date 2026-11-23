@@ -23,12 +23,13 @@ jobs:
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.1.0" "ndk;27.2.12479018" "cmake;3.22.1"'
       - name: Build pinned runtime prerequisites
         run: bash tools/ci_bootstrap.sh
-      - name: Test driver import and saved selection
+      - name: Test drivers and independent FPS measurements
         run: |
           bash gradlew --no-daemon --no-configuration-cache --max-workers=2 \
             -Dorg.gradle.parallel=false '-Dorg.gradle.jvmargs=-Xmx5g -Dfile.encoding=UTF-8' \
             -Pkotlin.compiler.execution.strategy=in-process \
-            :app:testModernDebugUnitTest --tests '*WowGpuDriversTest'
+            :app:testModernDebugUnitTest --tests '*WowGpuDriversTest' --tests '*OutputFpsTest' \
+            --tests '*GameFpsTest' --tests '*PerformanceTilesRoomTest'
       - name: Test Questie replacement and Ext update channel
         if: ${{ !cancelled() }}
         run: |
@@ -37,13 +38,15 @@ jobs:
             -Pkotlin.compiler.execution.strategy=in-process \
             :dsforever:testDebugUnitTest --tests '*QuestieReplacementTest' --tests '*ExtUpdateTest' \
             --tests '*AddonsReenableTest' --tests '*PolestarGuideTest' --tests '*ThirdPartyAddonsTest' \
-            --tests '*ImportedAddonsTest' --tests '*PcAddonsWantTest' --tests '*SettingsTabsTest'
+            --tests '*ImportedAddonsTest' --tests '*PcAddonsWantTest' --tests '*SettingsTabsTest' \
+            --tests '*PerformanceTileModelTest'
       - name: Test bundled Lua and add-on manifest
         if: ${{ !cancelled() }}
         run: |
           python3 -m venv "$RUNNER_TEMP/lua-tests"
           "$RUNNER_TEMP/lua-tests/bin/pip" install 'lupa==2.6'
           "$RUNNER_TEMP/lua-tests/bin/python" companion/tools/test_questie_replacement.py
+          "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tests/test_game_fps.py
       - name: Restore fork signing identity
         env:
           KEYSTORE: ${{ secrets.EXT_KEYSTORE_BASE64 }}

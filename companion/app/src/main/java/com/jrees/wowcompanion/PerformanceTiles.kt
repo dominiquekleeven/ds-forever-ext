@@ -93,6 +93,7 @@ object PerformanceTileModel {
 
     // the lines' keys (the view's presses)
     const val L_LIMIT = "limit"; const val L_RESTART = "restart"
+    const val L_GAME_FPS = "game_fps"
     const val L_FG = "fg"; const val L_MULT = "mult"; const val L_FLOW = "flow"; const val L_PERF = "perf"; const val L_DLL = "dll"
     const val L_LIGHTER = "lighter"; const val L_LOWGFX = "lowgfx"; const val L_MAP = "homemap"; const val L_STYLE = "homestyle"
     const val L_BUILD = "build"; const val L_DEFERRED = "deferred"
@@ -105,6 +106,7 @@ object PerformanceTileModel {
     fun lines(id: String, s: State, deferredOpen: Boolean = false): List<Line> = when (id) {
         LIMIT -> buildList {
             add(Line(L_LIMIT, null, null, FrameGen.LIMITS.map { FrameGen.limitLabel(it) }, FrameGen.LIMITS.indexOf(s.limit), Kind.CHOICE))
+            add(Line(L_GAME_FPS, "WoW FPS counter (Ctrl+R)", null, listOf("Toggle"), -1, Kind.ACTION))
             if (s.limitWaits || s.fgWaits) add(restart())
         }
         FG -> buildList {
@@ -619,6 +621,7 @@ class PerformanceTiles(context: Context, private val host: SettingsView) : View(
     private fun press(line: PerformanceTileModel.Line, k: Int) {
         when (line.key) {
             M.L_LIMIT -> FrameGen.askLimit(FrameGen.LIMITS[k])
+            M.L_GAME_FPS -> GameUi.toggleFramerate()
             M.L_FG -> if (k == 0) { if (FrameGen.hasDll()) FrameGen.enabled = true } else FrameGen.enabled = false
             M.L_MULT -> FrameGen.multiplier = FrameGen.MULTIPLIERS[k]
             M.L_FLOW -> FrameGen.flowScale = FrameGen.stepFlow(FrameGen.flowScale, if (k == 0) -1 else 1)

@@ -3135,6 +3135,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
             // b-release-spirit: the dialogs' tap row could not be had (the tap pad has no row left): every dialog button would tap nothing
             "dialogpad" -> if (current) android.util.Log.w("WCDLG", "the dialogs have NO tap row: ${msg.optString("why")} (rows ${msg.optInt("rows", -1)})")
             "pvp" -> PvpModel.update(msg)   // the PvP rank (Character room tab 4) + the battleground queues (pvp session)
+            "gamefps" -> GameFps.note(msg.optDouble("fps", Double.NaN), current, android.os.SystemClock.elapsedRealtime())
             "hub" -> GameUi.onHub(msg, current)
             "padrx" -> GameUi.onPadRx(msg, current)           // fix/desk-click-switch: Hub hub70, a press's word at once
             // the layout editor (Hub hub55): its document, CURRENT or replayed (a replay only shows; the page taps only while it is open)

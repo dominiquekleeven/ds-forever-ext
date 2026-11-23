@@ -2,6 +2,7 @@ package app.gamenative.ui.widget
 
 internal enum class MetricId {
     FPS,
+    GAME_FPS,
     CPU,
     GPU,
     RAM,
@@ -29,10 +30,11 @@ internal data class BatterySnapshot(
 )
 
 internal data class HudSnapshot(
-    val fpsValue: Float,
+    val fpsValue: Float?,
     val cpuValue: Float?,
     val gpuValue: Float?,
     val fps: String,
+    val gameFps: String = "Game FPS unavailable",
     val cpu: String?,
     val gpu: String?,
     val ram: String,

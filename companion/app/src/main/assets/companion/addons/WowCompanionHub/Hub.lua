@@ -1095,6 +1095,7 @@ local function document()
         sw = swDoc(),                -- hub17: HUD mode's own switches (the row "uisw")
         prd = prdDoc(),              -- hub15: HUD mode's own bar's place (Interact's WC.prd), stepped on columns 36 / 37 / 38
         row = hub.row and ROW or nil,
+        fpsToggle = type(ToggleFramerate) == "function" or nil,
         pad = hub.row and WC.pad and WC.pad.describe() or nil,
         mt = type(WC.meters) == "table" and type(WC.meters.doc) == "function" and WC.meters.doc() or nil,   -- hub61: the meters
         hs = type(HS.doc) == "function" and HS.doc() or nil,       -- hub63: the controller UI, the buffs, the XP bar
@@ -1119,6 +1120,17 @@ local function emitHub(force)
 end
 
 -- hub70: the ring's word on its own when its count moved (checked every 0.2 s; one small line, pushed like a press's answer)
+function hub.fpsTick()
+    local fps = S(function() return GetFramerate() end)
+    if type(fps) ~= "number" or fps ~= fps or fps <= 0 or fps > 10000 then fps = nil end
+    WC.send(WC.encode({ type = "gamefps", fps = fps }))
+    if type(WC.push) == "function" then WC.push() end
+end
+
+function hub.toggleFps()
+    if type(ToggleFramerate) == "function" then pcall(ToggleFramerate) end
+end
+
 local rxSentN = nil
 function hub.rxTick()
     local pad = WC.pad
@@ -3849,6 +3861,7 @@ do
     -- the 1 s look: anything that gave a hidden frame its alpha back (a frame made again, a refresh we have no hook for)
     if type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
         C_Timer.NewTicker(1, function()
+            pcall(hub.fpsTick)
             for name, s in pairs(MT.st) do if s.hidden then pcall(MT.reassert, name) end end
         end)
     end

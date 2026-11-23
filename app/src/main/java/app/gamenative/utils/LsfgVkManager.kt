@@ -208,68 +208,42 @@ object LsfgVkManager {
     fun stopVsyncClock() {
         vsyncClockHandler?.removeCallbacksAndMessages(null)
         vsyncClockHandler = null
+        resetFps()
     }
 
-    /**
-     * Read the fps the layer actually presented, measured on-device.
-     * Returns null when the stats file is missing or stale (layer not running),
-     * in which case callers should fall back to their own estimate.
-     */
-    @JvmStatic
-    @Volatile private var cachedMeasuredFps: Float? = null
-    @Volatile private var lastStatsReadMs: Long = 0L
+    private val outputFps = OutputFps()
+    private var metricsBackend: String? = null
+    private var metricsSinceMs = System.currentTimeMillis()
 
-    @Volatile private var lastPresentedFrames: Long = -1L
-    @Volatile private var lastPresentedAtMs: Long = 0L
-
-    private fun readNativeMeasuredFps(): Float? {
-        val renderer = rendererRef?.get() ?: return null
-        val now = System.currentTimeMillis()
-        val frames = try {
-            renderer.presentedFrameCount
-        } catch (t: Throwable) {
-            return null
-        }
-        val prevFrames = lastPresentedFrames
-        val prevAt = lastPresentedAtMs
-        if (prevFrames < 0 || frames < prevFrames) {
-            lastPresentedFrames = frames
-            lastPresentedAtMs = now
-            return null
-        }
-        val elapsed = now - prevAt
-        if (elapsed < 500L) return cachedMeasuredFps
-        lastPresentedFrames = frames
-        lastPresentedAtMs = now
-        cachedMeasuredFps = ((frames - prevFrames) * 1000.0 / elapsed).toFloat()
-        return cachedMeasuredFps
+    @Synchronized
+    fun resetFps() {
+        outputFps.reset()
+        metricsBackend = null
+        metricsSinceMs = System.currentTimeMillis()
     }
 
-    /** Served from a cache refreshed off the main thread; callers poll ~1/s. */
+    /** Poll off the main thread (~1/s). Missing telemetry is unavailable, never an estimate. */
+    @Synchronized
     fun readMeasuredFps(container: Container): Float? {
-        if (isNativeBackend(container)) return readNativeMeasuredFps()
-        val now = System.currentTimeMillis()
-        if (now - lastStatsReadMs >= 500L) {
-            lastStatsReadMs = now
-            vsyncWriteExecutor.execute {
-                cachedMeasuredFps = try {
-                    val statsFile = File(container.rootDir, STATS_RELATIVE_PATH)
-                    if (statsFile.isFile &&
-                        System.currentTimeMillis() - statsFile.lastModified() <= STATS_FRESHNESS_MS
-                    ) {
-                        statsFile.readLines()
-                            .firstOrNull { it.startsWith("fps=") }
-                            ?.substringAfter("fps=")
-                            ?.toFloatOrNull()
-                    } else {
-                        null
-                    }
-                } catch (t: Throwable) {
-                    null
-                }
-            }
+        val native = isNativeBackend(container)
+        val backend = "${container.rootDir}:$native"
+        if (metricsBackend != backend) {
+            outputFps.reset()
+            metricsBackend = backend
         }
-        return cachedMeasuredFps
+        return try {
+            if (native) {
+                val renderer = rendererRef?.get() ?: run { outputFps.reset(); return null }
+                outputFps.sample(renderer.presentedFrameCount, android.os.SystemClock.elapsedRealtime())
+            } else {
+                val file = File(container.rootDir, STATS_RELATIVE_PATH)
+                if (!file.isFile || file.lastModified() < metricsSinceMs) null
+                else OutputFps.parse(file.readText(), file.lastModified(), System.currentTimeMillis())
+            }
+        } catch (t: Throwable) {
+            outputFps.reset()
+            null
+        }
     }
 
     // ---- Native backend ----------------------------------------------------
@@ -302,6 +276,7 @@ object LsfgVkManager {
     /** Push the container's LSFG settings into the host renderer's native pipeline. */
     @JvmStatic
     fun applyNativeRuntime(renderer: VulkanRenderer, container: Container, context: Context) {
+        if (rendererRef?.get() !== renderer) resetFps()
         rendererRef = WeakReference(renderer)
         appContext = context.applicationContext
         val multiplier = multiplier(container)

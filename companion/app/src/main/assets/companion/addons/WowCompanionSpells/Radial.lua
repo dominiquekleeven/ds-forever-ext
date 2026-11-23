@@ -1209,6 +1209,8 @@ local function pauseRow()
         elseif col >= 20 and col <= 27 then
             -- pr3: Settings > General > Reset (PadMap m175); its own answer, never a pauseack
             if type(WC.dsfReset) == "function" then WC.dsfReset(col) else ack(col, { ok = false, why = "no reset" }) end
+        elseif col == 28 then
+            if type(WC.hub) == "table" and type(WC.hub.toggleFps) == "function" then WC.hub.toggleFps() end
         elseif col == 10 then
             if inCombat() then ack(col, { ok = false, why = "combat" }) return end
             local pm = WC.padMap
