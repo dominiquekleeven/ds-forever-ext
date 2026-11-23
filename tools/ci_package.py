@@ -42,9 +42,13 @@ def main():
                     "--dexdump", str(tools / "dexdump")], check=True)
     with zipfile.ZipFile(apk) as archive:
         verify_packaged_components(archive, components)
-        for library in ("libcasc.so", "libinteriors.so", "libdsfwhisper.so", "libdsf-moonlight.so"):
+        for library in ("libcasc.so", "libinteriors.so", "libdsfwhisper.so", "libdsf-moonlight.so", "libgamenative_dns_v4mapped.so"):
             if "lib/arm64-v8a/" + library not in archive.namelist():
                 raise ValueError("Missing runtime library: " + library)
+        dns = root / ".bootstrap/dns/libgamenative_dns_v4mapped.so"
+        dns_digest = hashlib.sha256(dns.read_bytes()).hexdigest()
+        if hashlib.sha256(archive.read("lib/arm64-v8a/libgamenative_dns_v4mapped.so")).hexdigest() != dns_digest:
+            raise ValueError("Packaged DNS shim does not match the from-source CI build")
         if "assets/wow-session-bridge.exe" not in archive.namelist():
             raise ValueError("Missing from-source browser-login helper")
     out = root / "dist"
@@ -59,6 +63,7 @@ def main():
         "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
         "package": "app.dsforever.ext", "version": version, "versionCode": int(code),
         "sha256": digest, "bundled_components": components,
+        "dns_shim_sha256": dns_digest,
         "device_tested": False,
     }, indent=2) + "\n")
     print("Verified", target.name, digest)

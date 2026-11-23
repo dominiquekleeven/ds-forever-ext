@@ -75,6 +75,14 @@ object GameUi {
     fun init(c: Context) {
         appCtx = c.applicationContext
         if (prefs == null) prefs = c.applicationContext.getSharedPreferences("gameui", Context.MODE_PRIVATE)
+        if (prefs?.getBoolean(LOAD_REPORTS_KEY, false) == true) GameInput.load.reports = true
+    }
+
+    /** the add-ons reported a loading screen: from now on a login's taps wait for its end too ([LoadGate.reports], kept) */
+    fun loadReported() {
+        if (GameInput.load.reports) return
+        GameInput.load.reports = true
+        prefs?.edit()?.putBoolean(LOAD_REPORTS_KEY, true)?.apply()
     }
 
     fun mode(id: String): UiMode {
@@ -156,7 +164,10 @@ object GameUi {
 
     /** when the last CURRENT hello came (a login or a reload): the first hide waits for the loading screen (GameUiPolicy.SETTLE_MS) */
     @Volatile private var helloAt = 0L
-    fun onHello() { helloAt = System.currentTimeMillis(); policy.freshLogin(); castBar.freshLogin(); restore.freshLogin(); swBack.clear(); hudBack.clear() }
+    /** when the top-screen taps may start: never under a loading screen, then SETTLE_MS after the hello or LOAD_SETTLE_MS after the
+     *  loading screen went, whichever is later ([LoadGate]: the login's restore tap was lost under its loading screen) */
+    private fun settleAt(): Long = GameInput.load.settleAt(System.currentTimeMillis(), helloAt, GameUiPolicy.SETTLE_MS, LOAD_SETTLE_MS)
+    fun onHello() { helloAt = System.currentTimeMillis(); GameInput.load.hello(helloAt); policy.freshLogin(); castBar.freshLogin(); restore.freshLogin(); swBack.clear(); hudBack.clear() }
 
     /**
      * HUB17 THE HUD-MODE SPLIT (the user: the player frame, the target frame and the enemy nameplates on Top screen, the resource bar on
@@ -218,8 +229,17 @@ object GameUi {
     const val SW_UFTOT = "uftot"
     /** uf11 (the user: "toggles for health total, Percentage and blank with blank as the default"): one row of three, kept as two switches */
     const val SW_UFHPP = "ufhpp"; const val SW_UFHPT = "ufhpt"
-    /** hub31 (the user, 2026-11-11: "one other setting to hide the polestar UI from the top"): on = Polestar's windows hidden; off by default */
+    /** hub31 (the user, 2026-11-11: "one other setting to hide the polestar UI from the top"): on = Polestar's windows hidden (Hub.lua
+     *  hub31 / hub36: every top-level Polestar frame at alpha 0, nothing of Polestar's own changed, so its guide, arrow data and steps
+     *  still run and the Polestar tab / quest tracker keep driving it; hub72, the user's "Also make it ignore touches": their mouse
+     *  input off too, given back exactly at Off). HIDDEN BY DEFAULT since 2026-11-20 (the user: "does polestar show
+     *  on the top screen by default? we should hide that by default"); it was shown by default from 2026-11-11. Existing players: the
+     *  key "sw.ps.<character>" is only written by the player's own tap on Settings > Top screen > Navigation > Polestar ([setSwitch]),
+     *  so a character with no key (never chose) moves to hidden, and a character whose key says shown (false: they turned it On) keeps
+     *  it shown; no migration key. Reset > Layouts ("sw.*.") takes it back to hidden ([ResetPlan]) */
     const val SW_PS = "ps"
+    /** the Polestar switch's default: hidden (see [SW_PS]) */
+    const val SW_PS_DEFAULT_HIDDEN = true
     /** hub33 (the user, 2026-11-11: "find a way to include Pet HP in the HUD, and better distinguish the player HUD vs Pet HUD"): the pet's
      *  strip under the resource bar (mock-up A, "Sub-strip under"); on by default */
     const val SW_PET = "pet"
@@ -267,7 +287,7 @@ object GameUi {
     // hub19: the party frames; ON by default since 2026-11-05 (the game hides health from add-ons: its own frames are the real health)
     private val SW_DEFAULT = mapOf(SW_PLAYER to false, SW_TARGET to false, SW_NP to true, SW_PRD to true, SW_WM to false, SW_PARTY to true,
         // hub22: start attack off until chosen; Auto Shot follows the game's own default (on) unless chosen
-        SW_ATK to false, SW_SHOT to true, SW_PMODE to true, SW_UFP to true, SW_UFT to true, SW_UFTOT to false, SW_UFHPP to false, SW_UFHPT to false, SW_SHOTF to false, SW_PS to false,
+        SW_ATK to false, SW_SHOT to true, SW_PMODE to true, SW_UFP to true, SW_UFT to true, SW_UFTOT to false, SW_UFHPP to false, SW_UFHPT to false, SW_SHOTF to false, SW_PS to SW_PS_DEFAULT_HIDDEN,
         SW_PET to true, SW_SRES to true, SW_NPF to false)
     /** this character's choice for [part] (its default until one is made); the resource bar's old "HUD mode" choice carries over */
     fun swWant(part: String): Boolean {
@@ -425,8 +445,12 @@ object GameUi {
         val now = swNow(part) ?: return null
         val want = swWant(part)
         return Row(id, label, null, if (want) UiMode.ON else UiMode.OFF, true, !now,
-            if (now == want) (if (now) onWord else offWord) else "Sent")
+            if (now == want) (if (now) onWord else offWord) else if (swNoRow()) PadFit.NO_ROW_NOTE else "Sent")
     }
+    /** #550: the switches' row is registered but this layout cannot place it (TapPad pad26 `drop`): no tap can land, none waits */
+    private fun swNoRow(): Boolean = PadFit.missing(pad, sw?.row ?: "uisw")
+    /** #550: why a tap on [row] did not go: a row the layout cannot place, else no pad yet */
+    private fun noTapWhy(row: String): String = if (PadFit.missing(pad, row)) PadFit.NO_ROW_NOTE else "The game has not published its tap pad"
     fun playerRow(): Row? = swRow(PLAYER_ID, SW_PLAYER, "Player frame", "Shown on the top screen", "Hidden: the resource bar and the HUD instead")
     // hub26: while DS Forever's own frames are on, the game's of that group stay hidden whatever their own switch says
     fun targetRow(): Row? = swRow(TARGET_ID, SW_TARGET, "Target frame", "Shown on the top screen", "Hidden: the bars over the mobs instead")
@@ -699,7 +723,7 @@ object GameUi {
         val m = mt
         val h = hs
         if (m == null && h == null) return
-        if (character == null || s == null || !live || !s.current || now < helloAt + GameUiPolicy.SETTLE_MS) return
+        if (character == null || s == null || !live || !s.current || now < settleAt()) return
         if (pad?.optJSONObject("rows")?.has(MT_ROW) != true || layOpen()) return
         // split-hud: the parts' words first (the same row, one tap at a time), then the meters'
         val col = h?.let { hsCol(it) } ?: m?.let { mtCol(it, dmgChosen(), cdmChosen(), partsChosen()) } ?: return
@@ -797,6 +821,8 @@ object GameUi {
                           if (e.has("why")) e.optString("why") else null))
         }
         pad = h.optJSONObject("pad")
+        // #550: rows this layout cannot place (TapPad pad26 `drop`) are said ONCE, never a silent wait
+        if (current) PadFit.once(pad)?.let { n -> Log.i("WCLOG", "pad: $n (not placed: ${PadFit.dropped(pad).joinToString(" ")})"); GameInput.onStatus(n) }
         // fix/stream-row-offset: the load the stream's measured fit is for, and a strip measurement whose answer this document carries
         if (h.has("boot")) TapCal.boot = h.optLong("boot", 0L)
         if (current) TapCal.settle(pad, System.currentTimeMillis())?.let { line -> Log.i("WCHUB", line); TapBridge.note(line) }
@@ -878,7 +904,8 @@ object GameUi {
         // fix/stream-row-offset (the user, 2026-11-18, test 1494 streamed: "testing stream, ui still didnt hide"): on the stream the pad's
         // calibration strip is tapped first (twice; TapCal), and this object's own taps wait for its answer (at most TapCal.WAIT_MS)
         // feat/desktop-clicks: not when Desktop clicks the pad (an exact pixel: nothing to measure)
-        if (live && s?.current == true && DeskClicks.route() == DeskClicks.Route.STREAM_TOUCH) {
+        // LoadGate: the strip's taps wait out the loading screen too (a strip tap under it is lost and spends one of TapCal's tries)
+        if (live && s?.current == true && now >= settleAt() && DeskClicks.route() == DeskClicks.Route.STREAM_TOUCH) {
             val cal = TapCal.wanted(pad, true, now)
             if (cal != null) {
                 if (TapBridge.calibrate(ctx, pad, cal)) { last = UiStep.Wait("Measuring where the stream's taps land"); return }
@@ -887,9 +914,9 @@ object GameUi {
             if (TapCal.busy(now)) { last = UiStep.Wait("Measuring where the stream's taps land"); return }
         }
         val r = rst
-        val rcol = restore.step(r, s, live, now, helloAt + GameUiPolicy.SETTLE_MS)
+        val rcol = restore.step(r, s, live, now, settleAt())
         if (rcol != null) {
-            last = if (GameInput.tap(ctx, pad, ROW, rcol)) UiStep.Wait("Restoring this character's top screen") else UiStep.Wait("The game has not published its tap pad")
+            last = if (GameInput.tap(ctx, pad, ROW, rcol)) UiStep.Wait("Restoring this character's top screen") else UiStep.Wait(noTapWhy(ROW))
             return
         }
         if (restore.holding(r, s, now)) { last = UiStep.Wait("Restoring this character's top screen"); return }
@@ -897,15 +924,15 @@ object GameUi {
             Log.i("WCHUB", "restore: no answer to the \"ui\" tap; the switches go as one batch")
             TapBridge.note("restore: no answer to ui:${r?.col} (${RestorePolicy.MAX_TRIES} taps); the switches go as one batch")
         }
-        val step = policy.step(s, room.name, visible, live, now, helloAt + GameUiPolicy.SETTLE_MS)
+        val step = policy.step(s, room.name, visible, live, now, settleAt())
         if (step is UiStep.Tap && !GameInput.tap(ctx, pad, ROW, step.mask)) {
-            last = UiStep.Wait("The game has not published its tap pad")
+            last = UiStep.Wait(noTapWhy(ROW))
             return
         }
         last = step
         // hub11: the cast bar's own tap, never in the same moment as a layout tap (one tap at a time)
         if (step !is UiStep.Tap) {
-            val col = castBar.step(castBarHidden, castBarHide(), visible, s, live, now, helloAt + GameUiPolicy.SETTLE_MS)
+            val col = castBar.step(castBarHidden, castBarHide(), visible, s, live, now, settleAt())
             if (col != null) GameInput.tap(ctx, pad, ROW, col)
             // hub13: HUD mode's own tap, never in the same moment as another (one tap at a time); no character known = nothing
             else if (character != null) {
@@ -915,8 +942,8 @@ object GameUi {
                 swBack.answered { p -> swSig(sws, p) }
                 val next = sws?.let { swNextSkip(it, swBack.parked(now)) { p -> swWant(p) } }
                 val swCol = if (sws != null && next != null) swCol(sws, next.first, next.second) else null
-                if (sws != null && swCol != null && swCol >= 0 && s != null && live && s.current &&
-                    now >= helloAt + GameUiPolicy.SETTLE_MS) {
+                if (sws != null && swCol != null && swCol >= 0 && s != null && live && s.current && !swNoRow() &&
+                    now >= settleAt()) {
                     // fix/1492-feedback (the user, 2026-11-18, test 1492: "when opening the stream, it looked like it was doing a lot of
                     // clicks again"): every switch that differs goes in ONE batch ([swBatch], [SW_GAP_MS] apart: the whole set in about
                     // a second, never one per answer spread over seconds); each part still waits for its own answer (its word / set)
@@ -943,7 +970,7 @@ object GameUi {
                     val hudSig = listOf(prdSel, prdY, prdW, prdS)
                     hudBack.answered { hudSig }
                     if (todo != null && s != null && live && s.current && s.hasRow &&
-                        hudBack.due(HUD_KEY, now) && now >= helloAt + GameUiPolicy.SETTLE_MS) {
+                        hudBack.due(HUD_KEY, now) && now >= settleAt()) {
                         hudBack.tapped(HUD_KEY, hudSig, now)
                         val cur = todo.cur!!; val want = todo.want!!
                         val selNow = prdSel ?: "y"
@@ -1023,5 +1050,7 @@ object GameUi {
     fun resetDone() { runCatching { reconcile() }; changed() }
 
     private const val ROW = "ui"      // Hub.lua ROW
+    private const val LOAD_REPORTS_KEY = "load.reports"
+    private const val LOAD_SETTLE_MS = 1_000L   // after the loading screen went (LoadGate)
     private const val HUD_KEY = "hud" // PR #533: hudBack's one key
 }

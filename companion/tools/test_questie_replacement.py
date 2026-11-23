@@ -15,7 +15,7 @@ ADDONS = ASSETS / "addons"
 class QuestieReplacement(unittest.TestCase):
     def test_manifest_and_lua_compile(self):
         lines = (ASSETS / "manifest.txt").read_text().splitlines()
-        self.assertEqual("set 418", lines[0])
+        self.assertEqual("set 424", lines[0])
         listed = dict(line.split("  ", 1)[::-1] for line in lines[1:])
         actual = {p.relative_to(ADDONS).as_posix(): hashlib.md5(p.read_bytes()).hexdigest()
                   for p in ADDONS.rglob("*") if p.is_file()}
@@ -25,7 +25,7 @@ class QuestieReplacement(unittest.TestCase):
         for p in ADDONS.rglob("*.lua"):
             self.assertIsNone(compile_lua(p.read_text()), str(p))
         for p in ADDONS.rglob("*.toc"):
-            self.assertIn("## Version: Set 418", p.read_text())
+            self.assertIn("## Version: Set 424", p.read_text())
 
     def test_polestar_does_not_register_hooks_or_read_user_addon(self):
         source = (ADDONS / "WowCompanion/Map.lua").read_text()

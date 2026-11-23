@@ -24,6 +24,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13.3'
       - name: Install pinned Android toolchain
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.1.0" "ndk;27.2.12479018" "cmake;3.22.1"'
       - name: Build pinned runtime prerequisites
@@ -41,7 +44,10 @@ jobs:
             --tests '*GameFpsTest' --tests '*FpsCounterTest' --tests '*PerformanceTilesRoomTest' \
             --tests '*GpuDriverMenuUiTest' --tests '*WowGpuDriverControllerTest' --tests '*StartMenuShotsTest' \
             --tests '*AddonTilesRoomTest.navigationUsesTheExistingCardAndCanBeRemovedWithoutChangingQuestie' \
-            --tests '*BottomRouteShotsTest'
+            --tests '*BottomRouteShotsTest' \
+            --tests '*KeyboardRepeatShiftTest' --tests '*XInputQueueTest' --tests '*XInputHoldTest' --tests '*XInputWiringTest' \
+            --tests '*GameSessionServiceTest' --tests '*WowLaunchSwitchTest' --tests '*FirstRunArtTest' \
+            --tests '*CrashStateLineTest' --tests '*WowCdnStreamTest' --tests '*HomeMapControlsShotsTest'
       - name: Test Questie replacement and Ext update channel
         if: ${{ !cancelled() }}
         env:
@@ -66,7 +72,11 @@ jobs:
             --tests '*ImportedAddonsTest' --tests '*PcAddonsWantTest' --tests '*SettingsTabsTest' \
             --tests '*PerformanceTileModelTest' --tests '*GpuDriverMenuTest' \
             --tests '*QuestieStartupTest' --tests '*DependencyQuestieTest' --tests '*AddonBackupsTest' \
-            --tests '*NavigationStartupTest' --tests '*SpfRouteTest'
+            --tests '*NavigationStartupTest' --tests '*SpfRouteTest' \
+            --tests '*HomeLayoutRulesTest' --tests '*HomeLayoutStoreTest' --tests '*HomeEditModelTest' \
+            --tests '*RealmKeyTest' --tests '*LoadGateTest' --tests '*GameVideoMemoryTest' \
+            --tests '*Light8Test' --tests '*Light8UnchangedTest' --tests '*FirstRunFolderTest' \
+            --tests '*CdnHttpsTest' --tests '*InstallFixesTest' --tests '*MapHoldClaimTest'
       - name: Test bundled Lua and add-on manifest
         if: ${{ !cancelled() }}
         env:
@@ -81,6 +91,10 @@ jobs:
           test -s "$SHORTEST_PATH_FOREVER_ZIP"
           "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_navigation.py -v
           "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_bottom_route.py -v
+          # The old HUD-switch script expects Polestar windows; Ext's Questie retirement checks replace that assumption.
+          for test in test_controller_situations test_chooser_grid test_realm_key test_roombar_mirror test_combat_top_flag test_pad_order test_map_stale_pend test_aura_container; do
+            "$RUNNER_TEMP/lua-tests/bin/python" -B "tools/$test.py"
+          done
       - name: Restore fork signing identity
         env:
           KEYSTORE: ${{ secrets.EXT_KEYSTORE_BASE64 }}

@@ -2308,6 +2308,13 @@ fun XServerScreen(
                                 onGameLaunchError,
                                 isOffline,
                             )
+                            // the game runs locally from here: a foreground service keeps it alive while another app is in front
+                            // (upstream v2.4.4); stopped by PluviaApp.shutdownEnvironment
+                            app.gamenative.GameSessionService.ensureStarted(context.applicationContext)
+                            // an exit that ran meanwhile (its shutdownEnvironment before this start) leaves no service behind
+                            if (isExiting.get() || PluviaApp.xEnvironment == null) {
+                                app.gamenative.GameSessionService.stop(context.applicationContext)
+                            }
 
                             if (!PluviaApp.isActivityInForeground && !neverSuspend) {
                                 PluviaApp.xEnvironment?.onPause()
@@ -2496,7 +2503,8 @@ fun XServerScreen(
             // DS Forever fork: Home on the bottom screen while the game screen is up (read-only in phase 2)
             // phase 3b: DS Forever's taps and keys go to this X server (its own pad's path)
             val dsSink = object : com.jrees.wowcompanion.InputSink.Sink {
-                override fun pressedKeys(): Set<Int> = xServerView.getxServer().keyboard.pressedKeys.map { it.toInt() and 255 }.toSet()
+                // Use the queue's logical state: a held modifier can still be waiting on the X input thread.
+                override fun pressedKeys(): Set<Int> = xServerView.getxServer().logicalPressedKeys
                 override fun key(xKeycode: Int, down: Boolean) {
                     val key = com.winlator.xserver.XKeycode.values().firstOrNull { it.id.toInt() == xKeycode } ?: return
                     val xs = xServerView.getxServer()
@@ -2504,14 +2512,12 @@ fun XServerScreen(
                 }
                 override fun tap(fx: Float, fy: Float) {
                     // ONE click on the cell's centre (a real press AND release on the same spot: secure cells act on the release),
-                    // then the pointer goes back where it was, never left parked on a cell (Quests' pad rules)
+                    // then the pointer goes back where it was, never left parked on a cell (Quests' pad rules). #153 review: the
+                    // spot to go back to is read on the input thread when the press runs (in order with queued moves and taps),
+                    // and the 30 ms hold is kept there even when the queue ran behind
                     val xs = xServerView.getxServer()
-                    val backX = xs.pointer.getX().toInt(); val backY = xs.pointer.getY().toInt()
-                    xs.injectPointerMove((fx * xs.screenInfo.width).toInt(), (fy * xs.screenInfo.height).toInt())
-                    xs.injectPointerButtonPress(com.winlator.xserver.Pointer.Button.BUTTON_LEFT)
-                    Thread.sleep(30)
-                    xs.injectPointerButtonRelease(com.winlator.xserver.Pointer.Button.BUTTON_LEFT)
-                    xs.injectPointerMove(backX, backY)
+                    xs.injectClickAt((fx * xs.screenInfo.width).toInt(), (fy * xs.screenInfo.height).toInt(),
+                        com.winlator.xserver.Pointer.Button.BUTTON_LEFT, 30L)
                 }
                 // f-trackpad-keyboard: the bottom screen's trackpad (relative moves) and its Left / Right click, where the pointer is
                 override fun moveBy(dx: Int, dy: Int) { xServerView.getxServer().injectPointerMoveDelta(dx, dy) }

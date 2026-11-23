@@ -2,8 +2,11 @@
 
 Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an official upstream release.
 
+- Updated to upstream **1.0.38** (`7552e1f3`), with its Home editor, controller situations, sticky character settings, loading/input fixes, HTTPS downloads, and memory improvements. Fork-specific integration notes: [UPSTREAM_1_0_38_EXT.md](UPSTREAM_1_0_38_EXT.md).
+- This is **1.0.38-ext.1**, version code **1521**, signed with the existing Ext key. Install over an earlier Ext build; do not uninstall or clear data. Questie, navigation, bottom-screen breadcrumbs, GPU driver selections, and independent FPS measurements remain part of this fork. Polestar is not restored.
+- Upstream now applies extra low-memory graphics reductions on 12 GB models as well as 8 GB models, and Light 8 automatically on 8 GB devices. This can reduce spell/particle detail. It also enables a video-memory cap and native BC textures on detected Adreno devices. Physical-device results remain unverified for this merged release.
 - Choose the bundled GPU driver, Android's system driver, or an imported compatible ARM64 Adrenotools driver ZIP. Turnip is not required in its name: Qualcomm Adreno and other compatible packages are accepted too.
-- Existing driver imports and saved selections remain usable. Ext.9 is a same-key update; do not uninstall an earlier Ext build.
+- Existing driver imports and saved selections remain usable across this same-key update.
 - GPU driver controls now belong in the existing launcher **Menu → GPU driver**, with the app's own theme and controller navigation. The separate top-screen button and Material driver dialog are removed.
 - **WoW FPS counter (Ctrl+R)**: bottom-screen **Settings → Performance → Frame limit → Toggle**. The same action is available in the controller command chooser. It does not change existing bindings or frame limits.
 - Ext.6 fixes the silent FPS action: the local button sends Ctrl+R directly without an add-on handshake. It shows an unavailable reason if local input is not ready. Keep WoW's default Ctrl+R FPS binding.
@@ -24,7 +27,7 @@ Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an 
 2. Install it beside DS Forever. Do not uninstall the original app.
 3. Select a **copy** of your WoW game folder. A shared folder also shares AddOns and WTF settings.
 4. Test the bundled driver first. Then open the launcher's **Menu → GPU driver** to import a driver ZIP, choose an imported driver, or choose System. Do not extract the ZIP yourself. Choose Bundled default if it fails.
-   For Questie and navigation setup, fully close WoW and start it through Ext.9 with internet access. Wait for setup to finish. Then check `/questie`, `/path`, and WoW's add-on settings. Focus a quest to start automatic guidance. Do not clear app data or uninstall to repair it.
+   For Questie and navigation setup, fully close WoW and start it through this Ext build with internet access. Wait for setup to finish. Then check `/questie`, `/path`, and WoW's add-on settings. Focus a quest to start automatic guidance. Do not clear app data or uninstall to repair it.
 5. Report the Thor model, driver name, reproduction steps, and symptoms. Never attach login files or credentials.
 
 Driver ZIPs need Adrenotools `meta.json` and an ARM64 shared library. Windows/Linux installers, arbitrary Mesa source archives and drivers for incompatible GPUs are not supported. An accepted ZIP is not proof of hardware compatibility. System selection does not replace or modify Android's driver.
