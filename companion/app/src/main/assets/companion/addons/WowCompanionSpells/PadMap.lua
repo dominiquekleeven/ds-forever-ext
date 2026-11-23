@@ -111,7 +111,7 @@ local COMMANDS = {
     -- whether this client lets a macro call them is for the first device run to say (UI Art's icons)
     { key = "CAMZOOMIN", mn = "DS Zoom In", body = "/run CameraZoomIn(2)", icon = 134441, n = "Camera Zoom In" },
     { key = "CAMZOOMOUT", mn = "DS Zoom Out", body = "/run CameraZoomOut(2)", icon = 132172, n = "Camera Zoom Out" },
-    { key = "DSFPS", mn = "DS FPS Counter", body = "/run ToggleFramerate()", icon = 134400, n = "WoW FPS counter (Ctrl+R)" },
+    { key = "DSFPS", mn = "DS FPS Counter", body = "/run if type(RunBinding)=='function' then RunBinding('TOGGLEFPS') elseif type(ToggleFramerate)=='function' then ToggleFramerate() else print('WoW FPS counter unavailable') end", icon = 134400, n = "WoW FPS counter (Ctrl+R)" },
 }
 
 -- m34 THE GAME'S KEY BINDINGS ON A BUTTON (the user's pick A 2026-10-07, via tracking: "Jump / Interact / Autorun / Walk on any button ... A: Build for plain + ZL"): this client has

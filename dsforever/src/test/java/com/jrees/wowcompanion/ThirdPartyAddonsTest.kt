@@ -27,6 +27,7 @@ class ThirdPartyAddonsTest {
     private var apiCalls = 0
     private var served = 0L                                    // the bytes the asset route sent (a resume sends fewer)
     private var zipBytes = ByteArray(0)
+    @Volatile private var downloadDelayMs = 0L
 
     private fun zipOf(vararg files: Pair<String, String>): ByteArray {
         val bo = ByteArrayOutputStream()
@@ -59,7 +60,7 @@ class ThirdPartyAddonsTest {
                     val (code, body) = when {
                         path.startsWith("/repos/o/r/releases/tags/") -> 200 to ("{\"tag_name\":\"t/v1.0\",\"assets\":[{\"name\":\"Test-1.0.zip\"," +
                             "\"size\":${zipBytes.size},\"browser_download_url\":\"${base()}/dl/Test-1.0.zip\"}]}").toByteArray()
-                        path.startsWith("/dl/") -> { val f = range ?: 0; served += zipBytes.size - f
+                        path.startsWith("/dl/") -> { Thread.sleep(downloadDelayMs); val f = range ?: 0; served += zipBytes.size - f
                             (if (f > 0) 206 else 200) to zipBytes.copyOfRange(f, zipBytes.size) }
                         else -> 404 to ByteArray(0)
                     }
@@ -106,7 +107,7 @@ class ThirdPartyAddonsTest {
     }
 
     @Test fun questieBundleInstallsOnlyQuestieAndKeepsItsNotices() {
-        zipBytes = zipOf("Questie/Questie_Forever.toc" to "## Interface: 16001\n## Version: 1.0\n",
+        zipBytes = zipOf("Questie/Questie_Forever.toc" to "## Interface: 16001\n## Version: 1.0\n## X-QuestieDB-Contract: 4\n",
             "Questie/LICENSE.md" to "upstream mixed license", "Questie/gpl-3.0.md" to "GPL text",
             "Questie/Libs/Example/LICENSE" to "library notice",
             "QuestieDB/QuestieDB_Forever.toc" to "## Version: 1.0\n",
@@ -155,6 +156,23 @@ class ThirdPartyAddonsTest {
         assertFalse(File(addons, "TestA").exists()); assertFalse(File(addons, "TestB").exists())
         assertTrue(backup.listFiles()!!.any { it.name.startsWith("TestA-1.0-") } && backup.listFiles()!!.any { it.name.startsWith("TestB-1.0-") })
         assertFalse(ThirdPartyAddons.coreInstalled(a))
+    }
+
+    @Test fun firstPlayWaitsForQuestiesExistingDownloadWriter() {
+        zipBytes = zipOf("Questie/Questie_Forever.toc" to "## Interface: 16001\n## Version: 1.0\n## X-QuestieDB-Contract: 4\n")
+        val sample = addon(zipBytes)
+        val a = sample.copy(id = "questie", core = sample.core.copy(folders = listOf("Questie")))
+        ThirdPartyAddons.ALL = listOf(a)
+        choices["questie.core"] = true
+        downloadDelayMs = 200
+        val download = Thread { ThirdPartyAddons.fetchNow(a, "core") }.apply { start() }
+        val until = System.currentTimeMillis() + 5_000
+        while (!ThirdPartyAddons.fetchingNow(a, "core") && System.currentTimeMillis() < until) Thread.sleep(5)
+        assertTrue(ThirdPartyAddons.fetchingNow(a, "core"))
+        ThirdPartyAddons.applyAtStart(game)
+        download.join(5_000)
+        assertTrue("first Play must not skip an in-flight Questie install", ThirdPartyAddons.coreInstalled(a))
+        assertEquals(zipBytes.size.toLong(), served)
     }
 
     @Test fun aWrongChecksumNeverGoesIn() {

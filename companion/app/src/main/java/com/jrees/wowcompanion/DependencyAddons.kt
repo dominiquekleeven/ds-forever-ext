@@ -54,7 +54,7 @@ object DependencyAddons {
      * QuestieDB name (rule 2) checks again at its first start, not up to 6 h later on an older app's "skipped (no QuestieDB-Forever.zip
      * in v1.1.1)". Bump when the way a package is found changes.
      */
-    internal const val STATE_RULE = 2
+    internal const val STATE_RULE = 3
     /** a whole download's deadline: a server that trickles bytes (each read inside the read timeout) still ends (Track D's note) */
     const val DOWNLOAD_DEADLINE_MS = 10 * 60_000L
     private const val MAX_ZIP = 64L * 1024 * 1024
@@ -81,15 +81,19 @@ object DependencyAddons {
      * Checks / installs every dependency for the game's [flavorRoot] (the `_classic_beta_` folder); [cache] = the app's private cache,
      * [state] = a small private file remembering the last check. One line for the top screen.
      */
-    fun run(flavorRoot: File, cache: File, state: File, now: Long = System.currentTimeMillis()): String {
+    fun run(flavorRoot: File, cache: File, state: File, now: Long = System.currentTimeMillis()): String =
+        ThirdPartyAddons.applyLock.run { lock(); try { runLocked(flavorRoot, cache, state, now) } finally { unlock() } }
+
+    private fun runLocked(flavorRoot: File, cache: File, state: File, now: Long): String {
         val addons = File(flavorRoot, "Interface/AddOns")
         val last = runCatching { JSONObject(state.readText()) }.getOrNull()
         val results = DEPS.filter { wanted(it) }.map { dep ->
             val installed = installedVersion(File(addons, dep.folder))
             val prev = last?.optJSONObject(dep.folder)
             // recently checked and still the same copy: the last line again, no network
-            if (prev != null && now - prev.optLong("at") < RECHECK_MS && prev.optString("installed") == (installed ?: "") &&
-                !prev.optBoolean("pending") && prev.optInt("rule") == STATE_RULE) Result(dep, prev.optString("line"))
+            if (prev != null && installed != null && questieDbProblem(File(addons, dep.folder)) == null &&
+                now - prev.optLong("at") < RECHECK_MS && prev.optString("installed") == installed &&
+                !prev.optString("line").contains("skipped") && !prev.optBoolean("pending") && prev.optInt("rule") == STATE_RULE) Result(dep, prev.optString("line"))
             else runCatching { check(dep, flavorRoot, cache, installed) }
                 .getOrElse { Result(dep, "${dep.folder} skipped (${reason(it)})${installed?.let { v -> "; $v kept" } ?: ""}") }
         }
@@ -110,10 +114,28 @@ object DependencyAddons {
     }
 
     private fun check(dep: Dep, flavorRoot: File, cache: File, installed: String?): Result {
-        val rel = JSONObject(get("$api/repos/${dep.repo}/releases/latest").toString(Charsets.UTF_8))
+        try {
+            return checkRelease(dep, flavorRoot, cache, installed,
+                JSONObject(get("$api/repos/${dep.repo}/releases/latest").toString(Charsets.UTF_8)))
+        } catch (t: Throwable) {
+            if (dep.folder != "QuestieDB" || questieDbProblem(File(flavorRoot, "Interface/AddOns/QuestieDB")) == null) throw t
+            // Known contract-4 Forever package: repair also works when release discovery is offline or incompatible.
+            val name = "QuestieDB-1.1.4-Forever.zip"
+            val asset = JSONObject().put("name", name).put("size", 8_419_126L)
+                .put("digest", "sha256:77560ed5a425de989b45bbaddb3fd0eb2173df25f43c4d5c3ef8b4622985486c")
+                .put("browser_download_url", if (api.startsWith("http://127.0.0.1")) "$api/dl/$name"
+                    else "https://github.com/Questie/QuestieDB/releases/download/v1.1.4/$name")
+            return checkRelease(dep, flavorRoot, cache, installed,
+                JSONObject().put("tag_name", "v1.1.4").put("assets", org.json.JSONArray().put(asset)))
+        }
+    }
+
+    private fun checkRelease(dep: Dep, flavorRoot: File, cache: File, installed: String?, rel: JSONObject): Result {
         val tag = rel.optString("tag_name").ifEmpty { throw IOException("no release") }
         val latest = tag.removePrefix("v")
-        if (installed != null && compare(installed, latest) >= 0) return Result(dep, "${dep.folder} $installed (up to date)")
+        if (installed != null && compare(installed, latest) >= 0 &&
+            (dep.folder != "QuestieDB" || questieDbProblem(File(flavorRoot, "Interface/AddOns/QuestieDB")) == null))
+            return Result(dep, "${dep.folder} $installed (up to date)")
         val assets = rel.optJSONArray("assets") ?: throw IOException("no ${dep.asset} in $tag")
         val all = (0 until assets.length()).mapNotNull { assets.optJSONObject(it) }
         val asset = assetOf(dep, all) ?: throw IOException("no ${dep.asset} in $tag")
@@ -166,20 +188,20 @@ object DependencyAddons {
         if (staging.exists()) staging.deleteRecursively()          // our own leftover only (never AddOns, never the backup)
         unpack(zip, staging, dep.folder)
         require(installedVersion(staging) != null) { "the package has no ${dep.folder} .toc" }
+        if (dep.folder == "QuestieDB") require(questieDbProblem(staging) == null) { "QuestieDB needs a Forever package supporting contract 4" }
         // Play may have been pressed while it unpacked: AddOns change only with the game closed (Track D's note)
         if (gameRunning()) throw GameStarted()
         val target = File(addons, dep.folder)
+        var old: File? = null
         if (target.exists()) {
             val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
-            val backup = File(iface, "$BACKUP/${dep.folder}-${installed ?: "unknown"}-$stamp")
-            backup.parentFile?.mkdirs()
-            if (!target.renameTo(backup)) throw IOException("the old ${dep.folder} could not be moved to the backup")
+            old = ThirdPartyAddons.backup(iface, target, stamp)
         }
-        if (!staging.renameTo(target)) {
-            // put the old copy back where it was
-            File(iface, BACKUP).listFiles()?.filter { it.name.startsWith("${dep.folder}-") }?.maxByOrNull { it.lastModified() }
-                ?.let { if (!target.exists()) it.renameTo(target) }
-            throw IOException("the new ${dep.folder} could not be moved in")
+        try {
+            ThirdPartyAddons.moveDir(staging, target, "the new ${dep.folder} could not be moved in")
+        } catch (t: Throwable) {
+            ThirdPartyAddons.putBack(listOf(target to old))
+            throw t
         }
     }
 
@@ -264,12 +286,33 @@ object DependencyAddons {
 
     private class GameStarted : RuntimeException()
 
+    /** Read only small selected headers; Questie's localization headers can be several MB. */
+    internal fun tocField(toc: File, field: String): String? = runCatching {
+        val prefix = Regex("^##\\s*${Regex.escape(field)}\\s*:\\s*(.*)$", RegexOption.IGNORE_CASE)
+        toc.useLines { lines -> lines.firstNotNullOfOrNull { prefix.matchEntire(it)?.groupValues?.get(1)?.trim() } }
+    }.getOrNull()
+
+    internal fun questieDbProblem(dir: File): String? {
+        val toc = File(dir, "QuestieDB_Forever.toc")
+        if (tocField(toc, "Interface") != "16001" || tocField(toc, "Version").isNullOrEmpty())
+            return "QuestieDB Forever is missing; connect to the internet and start again"
+        val config = runCatching { File(dir, "src/config.lua").readText() }.getOrDefault("")
+        fun number(field: String) = Regex("(?m)^config\\.$field\\s*=\\s*(\\d+)\\s*$").find(config)?.groupValues?.get(1)?.toIntOrNull()
+        val min = number("minSupportedContract")
+        val max = number("contractVersion")
+        return if (min != null && max != null && min in 1..4 && max >= 4) null
+            else "QuestieDB does not support contract 4; connect to the internet and start again"
+    }
+
     /** "## Version: x" from the folder's .toc files (any flavour's), or null when it is not installed */
     fun installedVersion(dir: File): String? = dir.listFiles()?.filter { it.isFile && it.name.endsWith(".toc", true) }
         ?.firstNotNullOfOrNull { toc ->
-            runCatching { toc.readLines() }.getOrNull()?.firstNotNullOfOrNull { l ->
-                Regex("""^##\s*Version\s*:\s*v?(\S+)""", RegexOption.IGNORE_CASE).find(l.trim())?.groupValues?.get(1)
-            }
+            runCatching {
+                // QuestieDB's localization metadata makes even a single TOC about 18 MB.
+                toc.useLines { lines -> lines.firstNotNullOfOrNull { l ->
+                    Regex("""^##\s*Version\s*:\s*v?(\S+)""", RegexOption.IGNORE_CASE).find(l.trim())?.groupValues?.get(1)
+                } }
+            }.getOrNull()
         }
 
     /** numeric parts, left to right ("1.0.10" > "1.0.9"); a missing part is 0 */

@@ -309,6 +309,12 @@ object ThirdPartyAddons {
         val p = pkgOf(a, key) ?: return Status(Kind.NONE, "")
         val inst = installed(a, key)
         val want = wanted(a, key)
+        if (want && inst && a.id == QUESTIE.id && key == "core") {
+            val checked = state(a, key)
+            val why = checked.optString("readyWhy")
+            if (why.isNotEmpty()) return Status(Kind.FAILED, "Questie not ready: $why")
+            if (!checked.has("readyWhy")) return Status(Kind.INSTALLED, "Installed; dependencies checked at next start")
+        }
         // what the worker is doing, while it is wanted and not in yet (an installed package is installed, whatever it did before)
         // an older version still in (the pin moved on): the row says it is the update
         val older = state(a, key).optString("in").takeIf { it.isNotEmpty() && !inst }
@@ -540,6 +546,12 @@ object ThirdPartyAddons {
                 if (state(a, key).optString("zip") != p.tag && p.bytes <= SMALL && fetchSmall && !fetchingNow(a, key)) {
                     onStep("Downloading add-ons: $name..."); fetch(a, key, p)
                 }
+                // Questie's worker often already owns its download on first Play. Do not launch ahead of that install.
+                if (a.id == QUESTIE.id && fetchSmall && fetchingNow(a, key)) {
+                    onStep("Downloading add-ons: $name...")
+                    val until = System.currentTimeMillis() + DependencyAddons.DOWNLOAD_DEADLINE_MS
+                    while (fetchingNow(a, key) && System.currentTimeMillis() < until && !DependencyAddons.gameRunning()) Thread.sleep(100)
+                }
                 if (state(a, key).optString("zip") != p.tag || zipOf(p).length() != p.bytes) {
                     resume(); lines.add("$name downloading")
                     log("add-ons: $name not applied: not downloaded yet (${if (zipOf(p).isFile) "${zipOf(p).length()} of ${p.bytes} bytes" else "nothing yet"})")
@@ -552,10 +564,6 @@ object ThirdPartyAddons {
                 // #412: a big pack (Spoken Quests: 1.5 GB, ~7 min on a Thor) says how far its unpack is (a line only when it changes)
                 var line = "Installing add-ons: $name..."
                 moveIn(a, key, p, flavorRoot) { pct -> installLine(name, pct).let { if (it != line) { line = it; onStep(it) } } }
-                if (a.id == QUESTIE.id) {
-                    val enabled = LauncherSetup.reenable(File(flavorRoot, "WTF"), DependencyAddons.gameRunning, setOf("Questie", "QuestieDB"))
-                    if (enabled.failed > 0) lines.add("Questie enable failed in ${enabled.failed} AddOns.txt files")
-                }
                 val ver = a.version.takeIf { key == "core" } ?: p.tag.substringAfterLast('v')
                 lines.add("$name $ver installed")
                 log("add-ons: applied $name $ver")
@@ -572,6 +580,20 @@ object ThirdPartyAddons {
         runCatching { ImportedAddons.applyQueued(flavorRoot, onStep) }
             .onSuccess { it?.let { l -> lines.add(l) } }
             .onFailure { lines.add("imported add-ons skipped (${DependencyAddons.reasonOf(it)})"); log("add-ons: imported: ${it.message}") }
+        // Do this on every start, including an already-recorded install; QuestieDB stays independently managed.
+        for (a in ALL.filter { it.id == QUESTIE.id && coreWanted(it) }) {
+            val why = runCatching {
+                val enabled = LauncherSetup.reenable(File(flavorRoot, "WTF"), DependencyAddons.gameRunning, setOf("Questie", "QuestieDB"))
+                when {
+                    DependencyAddons.gameRunning() -> "enable check waits until the game is closed"
+                    enabled.failed > 0 -> "could not enable in ${enabled.failed} AddOns.txt files; check storage access and start again"
+                    !installed(a, "core") -> "download/install pending; check Settings > Add-ons"
+                    else -> DependencyAddons.questieDbProblem(File(flavorRoot, "Interface/AddOns/QuestieDB"))
+                }
+            }.getOrElse { "dependency check failed: ${DependencyAddons.reasonOf(it)}" }
+            putState(a, "core", state(a, "core").put("readyWhy", why ?: ""))
+            lines.add(if (why == null) "Questie dependencies installed and enabled" else "Questie not ready: $why")
+        }
         capBackups()
         log("add-ons ($by): " + lines.joinToString("; ").ifEmpty { "nothing to do" })
         changed()
@@ -587,8 +609,9 @@ object ThirdPartyAddons {
         val addons = File(flavorRoot, "Interface/AddOns")
         for (a in ALL) for ((key, _) in a.pkgs()) {
             if (!present(a, key) || !wanted(a, key)) continue
-            val fs = folders(a, key)
-            val gone = fs.filter { DependencyAddons.installedVersion(File(addons, it)) == null }
+            val fs = folders(a, key).ifEmpty { if (a.id == QUESTIE.id) pkgOf(a, key)?.folders.orEmpty() else emptyList() }
+            val gone = fs.filter { DependencyAddons.installedVersion(File(addons, it)) == null ||
+                (a.id == QUESTIE.id && it == "Questie" && !questieForever(File(addons, it))) }
             if (fs.isEmpty() || gone.isEmpty()) continue
             putState(a, key, JSONObject())
             log("add-ons: ${a.id}-$key: ${gone.joinToString()} missing from AddOns: installed again")
@@ -597,6 +620,10 @@ object ThirdPartyAddons {
 
     /** not a failure of the package: it goes in at the next start (the game started meanwhile, not enough room) */
     private class Later(msg: String) : IOException(msg)
+
+    private fun questieForever(dir: File): Boolean = File(dir, "Questie_Forever.toc").let { toc ->
+        DependencyAddons.tocField(toc, "Interface") == "16001" && DependencyAddons.tocField(toc, "X-QuestieDB-Contract") == "4"
+    }
 
     /** the staged copy's mark: written once the unpack is complete, the package's [sig] */
     private const val STAGED = ".dsf-staged"
@@ -644,6 +671,7 @@ object ThirdPartyAddons {
                     maxBytes = if (a.id == QUESTIE.id) 256L * 1024 * 1024 else p.bytes * 3 / 2 + 50_000_000,
                     progress = progress)
                 keepNotices(staging)
+                if (a.id == QUESTIE.id) require(questieForever(File(staging, "Questie"))) { "Questie needs the Forever contract-4 package" }
                 mark.writeText(sig(p))
             } else log("add-ons: ${a.id}-$key: the staged copy is complete, not unpacked again")
             val folders = staging.listFiles()?.filter { d -> d.isDirectory && DependencyAddons.installedVersion(d) != null &&

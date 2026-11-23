@@ -118,6 +118,16 @@ object LauncherSetup {
                 try {
                     tmp.writeBytes(bytes)
                     check(tmp.readBytes().contentEquals(bytes)) { "did not read back" }
+                    // Recovery: with WoW closed, copy this exact pre-enable file over AddOns.txt.
+                    if (extra.isNotEmpty()) {
+                        val backup = File(f.path + ".dsf-before-questie-enable-" + System.nanoTime())
+                        check(backup.createNewFile()) { "backup exists" }
+                        backup.setReadable(false, false); backup.setWritable(false, false)
+                        backup.setReadable(true, true); backup.setWritable(true, true)
+                        backup.writeBytes(raw)
+                        check(backup.readBytes().contentEquals(raw)) { "backup did not read back" }
+                    }
+                    check(!gameRunning()) { "the game started" }
                     val moved = runCatching { java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE,
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING); true }.getOrElse { tmp.renameTo(f) }
                     check(moved) { "not replaced" }

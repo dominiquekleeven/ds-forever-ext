@@ -30,6 +30,26 @@ L.execute("WowCompanion.pad.rows.pause.handler(nil, 29)")
 assert L.eval("FPS_CALLS") == 1
 print("PASS one pause:28 player action toggles once; unrelated columns do not")
 
+# A client with the native binding but no ToggleFramerate global must still work.
+L.execute("ToggleFramerate = nil; BIND_CALLS = 0; function RunBinding(command) assert(command == 'TOGGLEFPS'); BIND_CALLS = BIND_CALLS + 1 end")
+L.execute("WowCompanion.pad.rows.pause.handler(nil, 28)")
+assert L.eval("BIND_CALLS") == 1
+assert L.eval("FPS_CALLS") == 1, "never send both native routes"
+print("PASS missing Lua global uses native TOGGLEFPS binding once")
+
+# Execute the actual controller command, not a source-string assertion.
+import re
 padmap = Path(F["padmap"]).read_text()
-assert 'key = "DSFPS"' in padmap and 'body = "/run ToggleFramerate()"' in padmap
-print("PASS controller command is opt-in ToggleFramerate, no saved binding rewrite")
+body = re.search(r'key = "DSFPS".*?body = "([^"]+)"', padmap).group(1)
+assert body.startswith("/run ")
+L.execute(body[5:])
+assert L.eval("BIND_CALLS") == 2
+L.execute("RunBinding = nil; function ToggleFramerate() FPS_CALLS = FPS_CALLS + 1 end")
+L.execute(body[5:])
+assert L.eval("FPS_CALLS") == 2
+L.execute("ToggleFramerate = nil; FPS_MESSAGE = nil; function print(message) FPS_MESSAGE = message end")
+L.execute(body[5:])
+assert L.eval("FPS_MESSAGE") == "WoW FPS counter unavailable"
+L.execute("FPS_MESSAGE = nil; WowCompanion.pad.rows.pause.handler(nil, 28)")
+assert L.eval("FPS_MESSAGE") == "WoW FPS counter unavailable"
+print("PASS controller command routes once on modern/legacy clients; unavailable routes explain why")

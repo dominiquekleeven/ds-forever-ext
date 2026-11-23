@@ -53,7 +53,9 @@ class DependencyQuestieTest {
 
     @Before fun up() {
         tmp = Files.createTempDirectory("questie").toFile()
-        zipBytes = zipOf("QuestieDB/QuestieDB.toc" to "## Version: 1.1.2\n", "QuestieDB/Database/Forever/quests.lua" to "x=1")
+        zipBytes = zipOf("QuestieDB/QuestieDB_Forever.toc" to "## Interface: 16001\n## Version: 1.1.2\n",
+            "QuestieDB/src/config.lua" to "config.contractVersion = 4\nconfig.minSupportedContract = 1\n",
+            "QuestieDB/Database/Forever/quests.lua" to "x=1")
         server = ServerSocket(0, 8, java.net.InetAddress.getByName("127.0.0.1"))
         val base = "http://127.0.0.1:${server.localPort}"
         val names = listOf("all", "Cata", "Forever", "Mists", "TBC", "Vanilla", "Wrath")

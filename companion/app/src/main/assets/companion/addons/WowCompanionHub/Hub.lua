@@ -1095,7 +1095,7 @@ local function document()
         sw = swDoc(),                -- hub17: HUD mode's own switches (the row "uisw")
         prd = prdDoc(),              -- hub15: HUD mode's own bar's place (Interact's WC.prd), stepped on columns 36 / 37 / 38
         row = hub.row and ROW or nil,
-        fpsToggle = type(ToggleFramerate) == "function" or nil,
+        fpsToggle = type(RunBinding) == "function" or type(ToggleFramerate) == "function" or nil,
         pad = hub.row and WC.pad and WC.pad.describe() or nil,
         mt = type(WC.meters) == "table" and type(WC.meters.doc) == "function" and WC.meters.doc() or nil,   -- hub61: the meters
         hs = type(HS.doc) == "function" and HS.doc() or nil,       -- hub63: the controller UI, the buffs, the XP bar
@@ -1128,7 +1128,11 @@ function hub.fpsTick()
 end
 
 function hub.toggleFps()
-    if type(ToggleFramerate) == "function" then pcall(ToggleFramerate) end
+    -- The native binding loads Blizzard's framerate UI on clients where its Lua global is not loaded yet.
+    local ok = false
+    if type(RunBinding) == "function" then ok = pcall(RunBinding, "TOGGLEFPS")
+    elseif type(ToggleFramerate) == "function" then ok = pcall(ToggleFramerate) end
+    if not ok then print("WoW FPS counter unavailable") end
 end
 
 local rxSentN = nil

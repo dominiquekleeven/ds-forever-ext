@@ -65,13 +65,9 @@ object GameUi {
     }
     private var state: HubState? = null
     private var pad: JSONObject? = null
-    private var fpsToggle = false
 
     /** One explicit player press. No saved binding, macro or CVar changes. */
-    fun toggleFramerate(): Boolean {
-        val ctx = appCtx ?: return false
-        return fpsToggle && GameInput.tap(ctx, pad, "pause", 28)
-    }
+    fun toggleFramerate(): Boolean = FpsCounter.toggle()
     private var room: Room = Room.MAP
     private var visible = false
     private var last: UiStep = UiStep.Wait("Waiting for the game")
@@ -801,7 +797,6 @@ object GameUi {
                           if (e.has("why")) e.optString("why") else null))
         }
         pad = h.optJSONObject("pad")
-        fpsToggle = current && h.optBoolean("fpsToggle", false)
         // fix/stream-row-offset: the load the stream's measured fit is for, and a strip measurement whose answer this document carries
         if (h.has("boot")) TapCal.boot = h.optLong("boot", 0L)
         if (current) TapCal.settle(pad, System.currentTimeMillis())?.let { line -> Log.i("WCHUB", line); TapBridge.note(line) }

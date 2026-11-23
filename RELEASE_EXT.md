@@ -3,12 +3,14 @@
 Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an official upstream release.
 
 - Choose the bundled GPU driver, Android's system driver, or an imported compatible ARM64 Adrenotools driver ZIP. Turnip is not required in its name: Qualcomm Adreno and other compatible packages are accepted too.
-- Existing driver imports and saved selections remain usable. Ext.5 is a same-key update; do not uninstall an earlier Ext build.
+- Existing driver imports and saved selections remain usable. Ext.6 is a same-key update; do not uninstall an earlier Ext build.
 - GPU driver controls now belong in the existing launcher **Menu → GPU driver**, with the app's own theme and controller navigation. The separate top-screen button and Material driver dialog are removed.
 - **WoW FPS counter (Ctrl+R)**: bottom-screen **Settings → Performance → Frame limit → Toggle**. The same action is available in the controller command chooser. It does not change existing bindings or frame limits.
+- Ext.6 fixes the silent FPS action: the local button sends Ctrl+R directly without an add-on handshake. It shows an unavailable reason if local input is not ready. Keep WoW's default Ctrl+R FPS binding.
 - The existing **Performance HUD** now separates **Game FPS** (WoW's `GetFramerate()`, before interpolation) from **Output FPS (presents)** (measured renderer/layer output, including generated frames when active). Enable Performance HUD in the launcher's quick menu. Missing or stale measurements say **unavailable**, never game FPS multiplied by a configured factor. Successful renderer presents are not a physical display scanout measurement.
 - Use Questie instead of the Polestar add-on. Questie supplies quest markers and objectives, not Polestar's step-by-step guide.
 - Questie 12.12.0 downloads from its official release during setup. Questie settings open on the game screen, not as a mirrored bottom-screen panel.
+- Ext.6 waits for Questie's initial download, repairs a missing Forever TOC, checks QuestieDB contract compatibility, and enables both add-ons each startup. A verified official DB fallback replaces failed cached checks. Failures say **Questie not ready** instead of implying success. Existing replaced add-ons and AddOns.txt receive recovery backups; SavedVariables remain unchanged.
 - Separate app: **DS Forever Ext**, package `app.dsforever.ext`. Leave the original app installed.
 - Fork-only signing key and update channel. No upstream report-worker endpoint.
 
@@ -18,6 +20,7 @@ Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an 
 2. Install it beside DS Forever. Do not uninstall the original app.
 3. Select a **copy** of your WoW game folder. A shared folder also shares AddOns and WTF settings.
 4. Test the bundled driver first. Then open the launcher's **Menu → GPU driver** to import a driver ZIP, choose an imported driver, or choose System. Do not extract the ZIP yourself. Choose Bundled default if it fails.
+   For the Questie repair, fully close WoW and start it through Ext.6 with internet access. Wait for setup to finish. Then check `/questie` and WoW's add-on settings. Do not clear app data or uninstall to repair it.
 5. Report the Thor model, driver name, reproduction steps, and symptoms. Never attach login files or credentials.
 
 Driver ZIPs need Adrenotools `meta.json` and an ARM64 shared library. Windows/Linux installers, arbitrary Mesa source archives and drivers for incompatible GPUs are not supported. An accepted ZIP is not proof of hardware compatibility. System selection does not replace or modify Android's driver.

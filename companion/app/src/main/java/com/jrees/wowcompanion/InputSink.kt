@@ -16,6 +16,8 @@ object InputSink {
     interface Sink {
         /** one X keycode down or up on the game's screen */
         fun key(xKeycode: Int, down: Boolean)
+        /** Local keyboard state; null on routes that cannot preserve held modifiers. */
+        fun pressedKeys(): Set<Int>? = null
         /** one left click at this fraction of the game's screen (0..1 each way) */
         fun tap(fx: Float, fy: Float)
         /** f-trackpad-keyboard: the game's mouse pointer moved by (dx, dy) screen pixels (the trackpad); default: nothing */

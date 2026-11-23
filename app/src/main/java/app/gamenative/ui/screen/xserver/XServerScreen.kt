@@ -2496,6 +2496,7 @@ fun XServerScreen(
             // DS Forever fork: Home on the bottom screen while the game screen is up (read-only in phase 2)
             // phase 3b: DS Forever's taps and keys go to this X server (its own pad's path)
             val dsSink = object : com.jrees.wowcompanion.InputSink.Sink {
+                override fun pressedKeys(): Set<Int> = xServerView.getxServer().keyboard.pressedKeys.map { it.toInt() and 255 }.toSet()
                 override fun key(xKeycode: Int, down: Boolean) {
                     val key = com.winlator.xserver.XKeycode.values().firstOrNull { it.id.toInt() == xKeycode } ?: return
                     val xs = xServerView.getxServer()

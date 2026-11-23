@@ -72,6 +72,7 @@ object PerformanceTileModel {
         val streamOn: Boolean = false,
         /** the stream's settings now (SetupBridge.streamSettings), null = Local */
         val stream: Stream? = null,
+        val fpsUnavailable: String? = "Start the local game to toggle FPS",
     ) {
         /** frame generation is really on (a copy of the DLL and the switch) */
         val generating get() = fgOn && hasDll
@@ -106,7 +107,8 @@ object PerformanceTileModel {
     fun lines(id: String, s: State, deferredOpen: Boolean = false): List<Line> = when (id) {
         LIMIT -> buildList {
             add(Line(L_LIMIT, null, null, FrameGen.LIMITS.map { FrameGen.limitLabel(it) }, FrameGen.LIMITS.indexOf(s.limit), Kind.CHOICE))
-            add(Line(L_GAME_FPS, "WoW FPS counter (Ctrl+R)", null, listOf("Toggle"), -1, Kind.ACTION))
+            add(Line(L_GAME_FPS, "WoW FPS counter (Ctrl+R)", s.fpsUnavailable, listOf("Toggle"), -1, Kind.ACTION,
+                off = if (s.fpsUnavailable == null) emptySet() else setOf(0)))
             if (s.limitWaits || s.fgWaits) add(restart())
         }
         FG -> buildList {
@@ -472,6 +474,7 @@ class PerformanceTiles(context: Context, private val host: SettingsView) : View(
             terrain = Terrain.coverageNow()?.let { c -> val z = c.optInt("zones"); val t = c.optInt("total")
                 if (z < t) "Route data $z / $t" else null },
             streamOn = SetupBridge.streamSettings != null,
+            fpsUnavailable = FpsCounter.unavailable(),
             stream = SetupBridge.streamSettings?.let { l -> val q = l.quality()
                 PerformanceTileModel.Stream(q, StreamQuality.offeredFps(l.can120(q.copy(fps = 120))), l.restartsOnClose(), l.tested()) })
     }
@@ -740,7 +743,7 @@ class PerformanceTiles(context: Context, private val host: SettingsView) : View(
             lb.label?.let { lab -> label(c, lab, line, labelSize) }
             val words = lb.buttons.indices.map { k -> Tr.t(line.words.getOrElse(k) { "" }) }
             val size = lb.buttons.withIndex().minOfOrNull { (k, b) -> wordFit(words[k], plateRoom(b.rect())) } ?: WORD_SIZE
-            for ((k, b) in lb.buttons.withIndex()) plate(c, b.rect(), words[k], M.lit(line, k), k !in line.off, size)
+            for ((k, b) in lb.buttons.withIndex()) plate(c, b.rect(), words[k], M.lit(line, k), k !in line.off, size, line.kind == PerformanceTileModel.Kind.ACTION)
         }
         val st = band.status
         val say = M.statusParts(id, s).joinToString(" · ") { cap(Tr.t(it)) }
@@ -865,10 +868,10 @@ class PerformanceTiles(context: Context, private val host: SettingsView) : View(
      * one band button: the game's red cloth, LIT only for a choice's picked button ([PerformanceTileModel.lit]); the word at the line's
      * one [size] in the plate's own colours (UiKit.choice's), on two lines when it does not fit one at that size
      */
-    private fun plate(c: Canvas, r: RectF, word: String, lit: Boolean, enabled: Boolean, size: Float) {
+    private fun plate(c: Canvas, r: RectF, word: String, lit: Boolean, enabled: Boolean, size: Float, action: Boolean = false) {
         UiKit.choice(c, r, "", lit, enabled)
         if (word.isEmpty()) return
-        val p = UiKit.bodyPaint(size, if (!enabled) Theme.dim else if (lit) Theme.btnLabel else Theme.textDim).apply { textAlign = Paint.Align.CENTER }
+        val p = UiKit.bodyPaint(size, if (!enabled) Theme.dim else if (lit) Theme.btnLabel else if (action) Theme.text else Theme.textDim).apply { textAlign = Paint.Align.CENTER }
         val room = plateRoom(r)
         val cy = r.centerY() - 2f
         val rows = if (p.measureText(word) <= room || !word.contains(' ')) listOf(word) else wrap(p, word, room).let {
