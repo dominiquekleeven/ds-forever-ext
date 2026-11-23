@@ -166,7 +166,8 @@ android {
             isIncludeAndroidResources = true
             all {
                 it.maxHeapSize = "4g"
-                it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+                // Maven Central's shared-runner rate limit blocks Robolectric's large Android runtime.
+                it.systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2")
                 it.testLogging { events("started", "failed") }
             }
         }
