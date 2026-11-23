@@ -257,8 +257,7 @@ class SettingsTabsTest {
 
     /** 1.0.9 Add-ons: every third-party add-on has its group there, its rows its own (title, modules, options) */
     @Test fun addOnsHaveTheirOwnGroups() {
-        val cards = if (Settings.ROUTE_MODES_ON) listOf(B.ADDON_POLESTAR, B.QUEST_TRACKING, B.ADDON_SPOKEN, B.ADDON_MANNERS)
-            else listOf(B.QUEST_TRACKING, B.ADDON_SPOKEN, B.ADDON_MANNERS)
+        val cards = listOf(B.ADDON_QUESTIE, B.ADDON_SPOKEN, B.ADDON_MANNERS)
         val shown = listOf(B.IMPORT) +                         // "a single button at the top of the list" (2026-11-16)
             cards +                                            // the picture cards (the beautify pass, 2026-11-17)
             B.IMPORTED                                         // the player's own imports (2026-11-16), last
