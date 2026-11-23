@@ -24,6 +24,7 @@ class ThirdPartyAddonsTest {
     private lateinit var server: ServerSocket
     private lateinit var tmp: File
     private val choices = HashMap<String, Boolean>()
+    private val realAll = ThirdPartyAddons.ALL
     private var apiCalls = 0
     private var served = 0L                                    // the bytes the asset route sent (a resume sends fewer)
     private var zipBytes = ByteArray(0)
@@ -76,6 +77,7 @@ class ThirdPartyAddonsTest {
         // the real registry's base add-on (Polestar) is never fetched ahead by these tests' start (its worker would call this server)
         ThirdPartyAddons.baseChoice = { false }
         choices["questie.replacement1122"] = true
+        choices["shortestpath.navigation1123"] = true
         ThirdPartyAddons.start(object : ThirdPartyAddons.Store {
             override fun get(k: String, d: Boolean) = choices[k] ?: d
             override fun put(k: String, v: Boolean) { choices[k] = v }
@@ -84,7 +86,7 @@ class ThirdPartyAddonsTest {
 
     @After fun down() {
         server.close(); tmp.deleteRecursively(); DependencyAddons.api = "https://api.github.com"
-        ThirdPartyAddons.ALL = listOf(ThirdPartyAddons.SPOKEN, ThirdPartyAddons.QUESTIE, ThirdPartyAddons.QUESTTRAIL, ThirdPartyAddons.MANNERS)
+        ThirdPartyAddons.ALL = realAll
         ThirdPartyAddons.renameDir = realRename; ThirdPartyAddons.fileRename = realFileRename; ThirdPartyAddons.settleMs = 5_000L
         ThirdPartyAddons.baseChoice = realBaseChoice; ThirdPartyAddons.setBaseChoice = realSetBaseChoice
         ThirdPartyAddons.noFetch = false
@@ -181,6 +183,25 @@ class ThirdPartyAddonsTest {
         ThirdPartyAddons.fetchNow(a, "core")
         assertEquals(ThirdPartyAddons.Kind.FAILED, ThirdPartyAddons.status(a, "core").kind)
         assertFalse(File(tmp, "private/dl/Test-1.0.zip").exists())
+    }
+
+    @Test fun firstPlayWaitsForShortestPathsExistingDownloadWriter() {
+        zipBytes = zipOf("ShortestPathForever/ShortestPathForever.toc" to
+            "## Interface: 16001\n## Version: 1.45.3\n## X-Forever-Core: v1.17.1\nLibs/Core.lua\n",
+            "ShortestPathForever/Libs/Core.lua" to "-- synthetic embedded core")
+        val sample = addon(zipBytes)
+        val a = sample.copy(id = "shortestpath", core = sample.core.copy(folders = listOf("ShortestPathForever")))
+        ThirdPartyAddons.ALL = listOf(a)
+        choices["shortestpath.core"] = true
+        downloadDelayMs = 200
+        val download = Thread { ThirdPartyAddons.fetchNow(a, "core") }.apply { start() }
+        val until = System.currentTimeMillis() + 5_000
+        while (!ThirdPartyAddons.fetchingNow(a, "core") && System.currentTimeMillis() < until) Thread.sleep(5)
+        assertTrue(ThirdPartyAddons.fetchingNow(a, "core"))
+        ThirdPartyAddons.applyAtStart(game)
+        download.join(5_000)
+        assertTrue("first Play must wait for the navigation install", ThirdPartyAddons.coreInstalled(a))
+        assertEquals(zipBytes.size.toLong(), served)
     }
 
     @Test fun aStoppedDownloadResumes() {

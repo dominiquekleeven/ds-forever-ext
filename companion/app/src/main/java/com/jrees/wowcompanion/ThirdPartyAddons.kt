@@ -16,8 +16,8 @@ import java.util.concurrent.Executors
 /**
  * THIRD-PARTY ADD-ONS THE PLAYER OPTS INTO (Settings > Add-ons; the user, 1.0.9, on Spoken: "Modules, don't download by default but
  * make an addon section of our settings"; then "For the larger app like spoken I think we need an option here to install it in the
- * first place"). Unlike QuestieDB ([DependencyAddons]: needed, installed by itself), nothing here is downloaded until the player (or,
- * Map's Quest tracking picker, [install]) asks for it, every size is shown first, and every package is PINNED: its release tag, its
+ * first place"). Questie and Shortest Path install once by user request; other add-ons wait for the player (or,
+ * Map's Quest tracking picker, [install]) to ask. Every package is PINNED: its release tag, its
  * exact size and its sha256, read on the day it was added (an update is offered, never taken by itself). Never inside the APK: the
  * project's own GitHub releases.
  *
@@ -118,6 +118,14 @@ object ThirdPartyAddons {
             "116eadd5833836d1b8ff30c9c8b5aaf724bc2de75eea362d6eee3d9962506b5f", listOf("Questie")),
         settings = "Questie settings")
 
+    /** Official Forever release, with its embedded ForeverCore and all upstream notices. Settings: /path in game. */
+    val SHORTEST_PATH = Addon(
+        id = "shortestpath", title = "Shortest Path Forever",
+        what = "Direction arrow and minimap route breadcrumbs for Questie targets; settings: /path",
+        by = "cjber", license = "GPL-3.0-or-later", repo = "cjber/shortest-path-forever", version = "1.45.3",
+        core = Pkg("v1.45.3", "ShortestPathForever-v1.45.3-forever.zip", 20_019_152L,
+            "09a54bb8ed17d4cff74211321202b4c66de180a7e9e53f5713a7ec52ff993ef9", listOf("ShortestPathForever")))
+
     /**
      * QUESTTRAIL (Krom, MIT; CurseForge project 1725624; Map's "Quest tracking: QuestTrail", the user: "Download it
      * (Add-ons tab)"): learns where quests are taken, done and handed in; a guidance arrow that plans the route. One folder,
@@ -153,7 +161,7 @@ object ThirdPartyAddons {
         core = Pkg("1.11.0", "Manners-v1.11.0.zip", 3_654_185L, "20dc080b26687fd2de4a457283fd27f09c1096a6d45df2b41f8d290a1b6a03ef",
             listOf("Manners"), url = "https://mediafilez.forgecdn.net/files/9408/996/Manners-v1.11.0.zip"))
 
-    var ALL: List<Addon> = listOf(SPOKEN, QUESTIE, QUESTTRAIL, MANNERS)
+    var ALL: List<Addon> = listOf(SPOKEN, QUESTIE, SHORTEST_PATH, QUESTTRAIL, MANNERS)
         internal set                                            // the off-device test swaps in its own
 
     /** "1.5 GB" / "447 MB" */
@@ -165,7 +173,7 @@ object ThirdPartyAddons {
     private const val SMALL = 100L * 1_000_000
     private const val DEADLINE_MS = 3 * 60 * 60_000L          // a 1.5 GB pack on a slow line: one download's whole budget
 
-    // ---------------------------------------------------------------- the player's choices (private prefs: nothing is on by default)
+    // ---------------------------------------------------------------- the player's choices (private prefs)
     /** where the player's choices live: the app's private prefs; a map in the off-device test */
     interface Store { fun get(k: String, d: Boolean): Boolean; fun put(k: String, v: Boolean) }
     private var prefs: Store? = null
@@ -192,6 +200,11 @@ object ThirdPartyAddons {
             prefs?.put("questie.core", true)
             prefs?.put("questie.migrated", true)
             prefs?.put("questie.replacement1122", true)
+        }
+        if (prefs?.get("shortestpath.navigation1123", false) != true) {
+            prefs?.put("shortestpath.core", true)
+            prefs?.put("shortestpath.migrated", true)
+            prefs?.put("shortestpath.navigation1123", true)
         }
         // test40: Polestar / QuestTrail installed while Map's setting switched them in (no Install of their own then): their Install
         // stands now, so they stay until their Uninstall (once, flagged)
@@ -309,10 +322,10 @@ object ThirdPartyAddons {
         val p = pkgOf(a, key) ?: return Status(Kind.NONE, "")
         val inst = installed(a, key)
         val want = wanted(a, key)
-        if (want && inst && a.id == QUESTIE.id && key == "core") {
+        if (want && inst && startupManaged(a) && key == "core") {
             val checked = state(a, key)
             val why = checked.optString("readyWhy")
-            if (why.isNotEmpty()) return Status(Kind.FAILED, "Questie not ready: $why")
+            if (why.isNotEmpty()) return Status(Kind.FAILED, "${a.title} not ready: $why")
             if (!checked.has("readyWhy")) return Status(Kind.INSTALLED, "Installed; dependencies checked at next start")
         }
         // what the worker is doing, while it is wanted and not in yet (an installed package is installed, whatever it did before)
@@ -546,8 +559,8 @@ object ThirdPartyAddons {
                 if (state(a, key).optString("zip") != p.tag && p.bytes <= SMALL && fetchSmall && !fetchingNow(a, key)) {
                     onStep("Downloading add-ons: $name..."); fetch(a, key, p)
                 }
-                // Questie's worker often already owns its download on first Play. Do not launch ahead of that install.
-                if (a.id == QUESTIE.id && fetchSmall && fetchingNow(a, key)) {
+                // The requested startup add-ons must not race their first background download on Play.
+                if (startupManaged(a) && fetchSmall && fetchingNow(a, key)) {
                     onStep("Downloading add-ons: $name...")
                     val until = System.currentTimeMillis() + DependencyAddons.DOWNLOAD_DEADLINE_MS
                     while (fetchingNow(a, key) && System.currentTimeMillis() < until && !DependencyAddons.gameRunning()) Thread.sleep(100)
@@ -581,18 +594,20 @@ object ThirdPartyAddons {
             .onSuccess { it?.let { l -> lines.add(l) } }
             .onFailure { lines.add("imported add-ons skipped (${DependencyAddons.reasonOf(it)})"); log("add-ons: imported: ${it.message}") }
         // Do this on every start, including an already-recorded install; QuestieDB stays independently managed.
-        for (a in ALL.filter { it.id == QUESTIE.id && coreWanted(it) }) {
+        for (a in ALL.filter { startupManaged(it) && coreWanted(it) }) {
             val why = runCatching {
-                val enabled = LauncherSetup.reenable(File(flavorRoot, "WTF"), DependencyAddons.gameRunning, setOf("Questie", "QuestieDB"))
+                val targets = if (a.id == QUESTIE.id) setOf("Questie", "QuestieDB") else setOf("ShortestPathForever")
+                val enabled = LauncherSetup.reenable(File(flavorRoot, "WTF"), DependencyAddons.gameRunning, targets)
                 when {
                     DependencyAddons.gameRunning() -> "enable check waits until the game is closed"
                     enabled.failed > 0 -> "could not enable in ${enabled.failed} AddOns.txt files; check storage access and start again"
                     !installed(a, "core") -> "download/install pending; check Settings > Add-ons"
-                    else -> DependencyAddons.questieDbProblem(File(flavorRoot, "Interface/AddOns/QuestieDB"))
+                    a.id == QUESTIE.id -> DependencyAddons.questieDbProblem(File(flavorRoot, "Interface/AddOns/QuestieDB"))
+                    else -> shortestPathProblem(File(flavorRoot, "Interface/AddOns/ShortestPathForever"))
                 }
             }.getOrElse { "dependency check failed: ${DependencyAddons.reasonOf(it)}" }
             putState(a, "core", state(a, "core").put("readyWhy", why ?: ""))
-            lines.add(if (why == null) "Questie dependencies installed and enabled" else "Questie not ready: $why")
+            lines.add(if (why == null) "${a.title} dependencies installed and enabled" else "${a.title} not ready: $why")
         }
         capBackups()
         log("add-ons ($by): " + lines.joinToString("; ").ifEmpty { "nothing to do" })
@@ -609,9 +624,10 @@ object ThirdPartyAddons {
         val addons = File(flavorRoot, "Interface/AddOns")
         for (a in ALL) for ((key, _) in a.pkgs()) {
             if (!present(a, key) || !wanted(a, key)) continue
-            val fs = folders(a, key).ifEmpty { if (a.id == QUESTIE.id) pkgOf(a, key)?.folders.orEmpty() else emptyList() }
+            val fs = folders(a, key).ifEmpty { if (startupManaged(a)) pkgOf(a, key)?.folders.orEmpty() else emptyList() }
             val gone = fs.filter { DependencyAddons.installedVersion(File(addons, it)) == null ||
-                (a.id == QUESTIE.id && it == "Questie" && !questieForever(File(addons, it))) }
+                (a.id == QUESTIE.id && it == "Questie" && !questieForever(File(addons, it))) ||
+                (a.id == SHORTEST_PATH.id && shortestPathProblem(File(addons, it)) != null) }
             if (fs.isEmpty() || gone.isEmpty()) continue
             putState(a, key, JSONObject())
             log("add-ons: ${a.id}-$key: ${gone.joinToString()} missing from AddOns: installed again")
@@ -620,6 +636,19 @@ object ThirdPartyAddons {
 
     /** not a failure of the package: it goes in at the next start (the game started meanwhile, not enough room) */
     private class Later(msg: String) : IOException(msg)
+
+    private fun startupManaged(a: Addon): Boolean = a.id == QUESTIE.id || a.id == SHORTEST_PATH.id
+
+    /** The Forever TOC and its load list include the embedded core; optional add-ons remain optional. */
+    internal fun shortestPathProblem(dir: File): String? {
+        val toc = File(dir, "ShortestPathForever.toc")
+        if (DependencyAddons.tocField(toc, "Interface") != "16001" ||
+            DependencyAddons.tocField(toc, "Version") != SHORTEST_PATH.version ||
+            DependencyAddons.tocField(toc, "X-Forever-Core") != "v1.17.1") return "the pinned Forever TOC is missing or incompatible"
+        val missing = toc.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+            .firstOrNull { !File(dir, it.replace('\\', '/')).isFile }
+        return missing?.let { "missing load file: $it" }
+    }
 
     private fun questieForever(dir: File): Boolean = File(dir, "Questie_Forever.toc").let { toc ->
         DependencyAddons.tocField(toc, "Interface") == "16001" && DependencyAddons.tocField(toc, "X-QuestieDB-Contract") == "4"
@@ -660,7 +689,8 @@ object ThirdPartyAddons {
         // is: a 1.54 GB pack is never unpacked twice for the same content
         // (review, 2026-11-11) and still whole: every folder the package brings is there with its .toc
         val staged = runCatching { mark.readText() }.getOrNull() == sig(p) &&
-            p.folders.all { DependencyAddons.installedVersion(File(staging, it)) != null }
+            p.folders.all { DependencyAddons.installedVersion(File(staging, it)) != null } &&
+            (a.id != SHORTEST_PATH.id || shortestPathProblem(File(staging, "ShortestPathForever")) == null)
         if (!staged && flavorRoot.usableSpace < p.bytes + SPACE_MARGIN)
             throw Later("needs ${size(((p.bytes + SPACE_MARGIN) / 1_000_000).toInt())} free for the game")
         var keep = false
@@ -672,10 +702,13 @@ object ThirdPartyAddons {
                     progress = progress)
                 keepNotices(staging)
                 if (a.id == QUESTIE.id) require(questieForever(File(staging, "Questie"))) { "Questie needs the Forever contract-4 package" }
+                if (a.id == SHORTEST_PATH.id) require(shortestPathProblem(File(staging, "ShortestPathForever")) == null) {
+                    "Shortest Path Forever needs its pinned Forever package and embedded core"
+                }
                 mark.writeText(sig(p))
             } else log("add-ons: ${a.id}-$key: the staged copy is complete, not unpacked again")
             val folders = staging.listFiles()?.filter { d -> d.isDirectory && DependencyAddons.installedVersion(d) != null &&
-                (a.id != QUESTIE.id || d.name in p.folders) } ?: emptyList()
+                (!startupManaged(a) || d.name in p.folders) } ?: emptyList()
             require(folders.isNotEmpty()) { "the package has no add-on in it" }
             if (DependencyAddons.gameRunning()) { keep = true; throw Later("the game started: at the next start") }
             // (review, 2026-11-11) the mark goes BEFORE the first folder leaves staging: a move cut short (a low-memory kill, #99 #93)

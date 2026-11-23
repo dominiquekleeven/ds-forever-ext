@@ -181,6 +181,23 @@ class AddonTilesRoomTest {
 
     // ---------------------------------------------------------------- the tab
 
+    @Test fun navigationUsesTheExistingCardAndCanBeRemovedWithoutChangingQuestie() {
+        installed("shortestpath", "questie")
+        ThirdPartyAddons.setCore(ThirdPartyAddons.SHORTEST_PATH, true)
+        ThirdPartyAddons.setCore(ThirdPartyAddons.QUESTIE, true)
+        val r = room()
+        assertTrue(cards(r).cardIds().contains("shortestpath"))
+        open(r, "shortestpath")
+        assertEquals("shortestpath", cards(r).openCard)
+        shot(r, "navigation_card")
+        val button = bandButtons(r).single()
+        tap(cards(r), button); lay(r)
+        assertTrue("first press confirms", ThirdPartyAddons.coreWanted(ThirdPartyAddons.SHORTEST_PATH))
+        tap(cards(r), bandButtons(r).single()); lay(r)
+        assertFalse(ThirdPartyAddons.coreWanted(ThirdPartyAddons.SHORTEST_PATH))
+        assertTrue("Questie remains selected", ThirdPartyAddons.coreWanted(ThirdPartyAddons.QUESTIE))
+    }
+
     /** Import first, then ONE headless row of standard cards (232 x 184, the Top screen's numbers), no heading over them */
     @Test fun addOnsAreOneRowOfStandardCards() {
         Settings.polestarGuide = PolestarGuide.ON; installed("polestar")

@@ -61,6 +61,7 @@ object AddonPictures {
                 ThirdPartyAddons.SPOKEN.id -> spoken(c, kit)
                 ThirdPartyAddons.MANNERS.id -> manners(c, kit)
                 ThirdPartyAddons.QUESTTRAIL.id -> questTrail(c, kit, ready)
+                ThirdPartyAddons.SHORTEST_PATH.id -> questTrail(c, kit, ready)
                 else -> glyph(c)
             }
         }

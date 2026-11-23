@@ -289,7 +289,7 @@ class ImportedAddonsTest {
     // ---------------------------------------------------------------- names never touched
     @Test fun namesProtected() {
         for (n in listOf("WowCompanion", "wowcompanionhub", "WOWCOMPANIONSPELLS", "WowCompanionAnything", "Polestar", "Polestar_Nav", "Questie", "QuestieDB",
-                "questiedb", "Spoken", "SpokenQuestsAudioHorde", "Manners", "QuestTrail", "Blizzard_AuctionUI", DependencyAddons.BACKUP, DependencyAddons.STAGING))
+                "questiedb", "ShortestPathForever", "Spoken", "SpokenQuestsAudioHorde", "Manners", "QuestTrail", "Blizzard_AuctionUI", DependencyAddons.BACKUP, DependencyAddons.STAGING))
             assertTrue(n, ImportedAddons.protectedName(n))
         for (n in listOf("Bagnon", "Details", "UserQuest", "WeakAuras", "Companion")) assertFalse(n, ImportedAddons.protectedName(n))
         // the real manifest's folders

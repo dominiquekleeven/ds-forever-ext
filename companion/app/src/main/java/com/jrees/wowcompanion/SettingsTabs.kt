@@ -157,6 +157,7 @@ object SettingsTabs {
         // Quest tracking is Polestar's card's guide line (the same PolestarGuide choice)
         ADDON_POLESTAR(Group.CARDS, "Polestar", ThirdPartyAddons.POLESTAR.rowWords(), Drawer.ADDONS),
         ADDON_QUESTIE(Group.CARDS, "Questie", ThirdPartyAddons.QUESTIE.rowWords(), Drawer.ADDONS),
+        ADDON_SHORTEST_PATH(Group.CARDS, "Shortest Path Forever", ThirdPartyAddons.SHORTEST_PATH.rowWords(), Drawer.ADDONS),
         QUEST_TRACKING(Group.CARDS, "Quest tracking", listOf("Quest tracking"), Drawer.ADDONS),
         ADDON_SPOKEN(Group.CARDS, "Spoken", ThirdPartyAddons.SPOKEN.rowWords(), Drawer.ADDONS),
         ADDON_MANNERS(Group.CARDS, "Manners", ThirdPartyAddons.MANNERS.rowWords(), Drawer.ADDONS),
@@ -183,6 +184,7 @@ object SettingsTabs {
     /** the third-party add-on a block draws (Settings > Add-ons), or null */
     fun addonOf(b: Block): ThirdPartyAddons.Addon? = when (b) {
         Block.ADDON_QUESTIE -> ThirdPartyAddons.QUESTIE
+        Block.ADDON_SHORTEST_PATH -> ThirdPartyAddons.SHORTEST_PATH
         Block.ADDON_SPOKEN -> ThirdPartyAddons.SPOKEN; Block.ADDON_POLESTAR -> ThirdPartyAddons.POLESTAR
         Block.ADDON_QUESTTRAIL -> ThirdPartyAddons.QUESTTRAIL; Block.ADDON_MANNERS -> ThirdPartyAddons.MANNERS; else -> null }
 

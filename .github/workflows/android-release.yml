@@ -31,18 +31,21 @@ jobs:
       - name: Test drivers and independent FPS measurements
         env:
           TRADE_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
+          ADDON_TILES_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
         run: |
           bash gradlew --no-daemon --no-configuration-cache --max-workers=2 \
             -Dorg.gradle.parallel=false '-Dorg.gradle.jvmargs=-Xmx5g -Dfile.encoding=UTF-8' \
             -Pkotlin.compiler.execution.strategy=in-process \
             :app:testModernDebugUnitTest --tests '*WowGpuDriversTest' --tests '*OutputFpsTest' \
             --tests '*GameFpsTest' --tests '*FpsCounterTest' --tests '*PerformanceTilesRoomTest' \
-            --tests '*GpuDriverMenuUiTest' --tests '*WowGpuDriverControllerTest' --tests '*StartMenuShotsTest'
+            --tests '*GpuDriverMenuUiTest' --tests '*WowGpuDriverControllerTest' --tests '*StartMenuShotsTest' \
+            --tests '*AddonTilesRoomTest.navigationUsesTheExistingCardAndCanBeRemovedWithoutChangingQuestie'
       - name: Test Questie replacement and Ext update channel
         if: ${{ !cancelled() }}
         env:
           QUESTIE_BUNDLE_ZIP: ${{ runner.temp }}/questie-bundle.zip
           QUESTIEDB_FOREVER_ZIP: ${{ runner.temp }}/questiedb-forever.zip
+          SHORTEST_PATH_FOREVER_ZIP: ${{ runner.temp }}/shortest-path-forever.zip
         run: |
           curl --fail --location --retry 3 --output "$QUESTIE_BUNDLE_ZIP" \
             'https://github.com/Questie/Questie/releases/download/bundle%2Fv12.12.0%2Bv1.1.4/Questie-v12.12.0%2Bv1.1.4.zip'
@@ -50,6 +53,9 @@ jobs:
             'https://github.com/Questie/QuestieDB/releases/download/v1.1.4/QuestieDB-1.1.4-Forever.zip'
           echo "116eadd5833836d1b8ff30c9c8b5aaf724bc2de75eea362d6eee3d9962506b5f  $QUESTIE_BUNDLE_ZIP" | sha256sum --check
           echo "77560ed5a425de989b45bbaddb3fd0eb2173df25f43c4d5c3ef8b4622985486c  $QUESTIEDB_FOREVER_ZIP" | sha256sum --check
+          curl --fail --location --retry 3 --output "$SHORTEST_PATH_FOREVER_ZIP" \
+            'https://github.com/cjber/shortest-path-forever/releases/download/v1.45.3/ShortestPathForever-v1.45.3-forever.zip'
+          echo "09a54bb8ed17d4cff74211321202b4c66de180a7e9e53f5713a7ec52ff993ef9  $SHORTEST_PATH_FOREVER_ZIP" | sha256sum --check
           bash gradlew --no-daemon --no-configuration-cache --max-workers=2 \
             -Dorg.gradle.parallel=false '-Dorg.gradle.jvmargs=-Xmx5g -Dfile.encoding=UTF-8' \
             -Pkotlin.compiler.execution.strategy=in-process \
@@ -57,14 +63,21 @@ jobs:
             --tests '*AddonsReenableTest' --tests '*PolestarGuideTest' --tests '*ThirdPartyAddonsTest' \
             --tests '*ImportedAddonsTest' --tests '*PcAddonsWantTest' --tests '*SettingsTabsTest' \
             --tests '*PerformanceTileModelTest' --tests '*GpuDriverMenuTest' \
-            --tests '*QuestieStartupTest' --tests '*DependencyQuestieTest' --tests '*AddonBackupsTest'
+            --tests '*QuestieStartupTest' --tests '*DependencyQuestieTest' --tests '*AddonBackupsTest' \
+            --tests '*NavigationStartupTest'
       - name: Test bundled Lua and add-on manifest
         if: ${{ !cancelled() }}
+        env:
+          QUESTIE_BUNDLE_ZIP: ${{ runner.temp }}/questie-bundle.zip
+          SHORTEST_PATH_FOREVER_ZIP: ${{ runner.temp }}/shortest-path-forever.zip
         run: |
           python3 -m venv "$RUNNER_TEMP/lua-tests"
           "$RUNNER_TEMP/lua-tests/bin/pip" install 'lupa==2.6'
           "$RUNNER_TEMP/lua-tests/bin/python" companion/tools/test_questie_replacement.py
           "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tests/test_game_fps.py
+          test -s "$QUESTIE_BUNDLE_ZIP"
+          test -s "$SHORTEST_PATH_FOREVER_ZIP"
+          "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_navigation.py -v
       - name: Restore fork signing identity
         env:
           KEYSTORE: ${{ secrets.EXT_KEYSTORE_BASE64 }}
