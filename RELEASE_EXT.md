@@ -3,7 +3,7 @@
 Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an official upstream release.
 
 - Choose the bundled GPU driver, Android's system driver, or an imported compatible ARM64 Adrenotools driver ZIP. Turnip is not required in its name: Qualcomm Adreno and other compatible packages are accepted too.
-- Existing driver imports and saved selections remain usable. Ext.8 is a same-key update; do not uninstall an earlier Ext build.
+- Existing driver imports and saved selections remain usable. Ext.9 is a same-key update; do not uninstall an earlier Ext build.
 - GPU driver controls now belong in the existing launcher **Menu → GPU driver**, with the app's own theme and controller navigation. The separate top-screen button and Material driver dialog are removed.
 - **WoW FPS counter (Ctrl+R)**: bottom-screen **Settings → Performance → Frame limit → Toggle**. The same action is available in the controller command chooser. It does not change existing bindings or frame limits.
 - Ext.6 fixes the silent FPS action: the local button sends Ctrl+R directly without an add-on handshake. It shows an unavailable reason if local input is not ready. Keep WoW's default Ctrl+R FPS binding.
@@ -13,7 +13,8 @@ Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an 
 - Ext.6 waits for Questie's initial download, repairs a missing Forever TOC, checks QuestieDB contract compatibility, and enables both add-ons each startup. A verified official DB fallback replaces failed cached checks. Failures say **Questie not ready** instead of implying success. Existing replaced add-ons and AddOns.txt receive recovery backups; SavedVariables remain unchanged.
 - Ext.7 adds **Shortest Path Forever 1.45.3** for a direction arrow and minimap breadcrumb route. It downloads from the author's official release during setup; TomTom is not required. Routes can use walking paths and transport rather than just pointing in a straight line. The existing shared QuestieDB stays under its one installer.
 - Ext.8 enables **Route to the focused quest** once, automatically. When the game's focused quest changes, Shortest Path starts its route without a map click. It does not choose the nearest quest or a levelling order. Existing guide-owned journeys are left alone. To opt out, use `/path` → Guidance → Route to the focused quest; later choices persist. The previous setting is retained in ShortestPathForeverDB.dsForeverExtPreviousFocusedQuest.
-- Manual destinations remain available: Alt-click a Questie world-map icon, or use Questie's tracker waypoint action. `/path` opens navigation settings. The trail and arrow are on WoW's game screen, not a new bottom-screen route display. Routes can be imperfect, and pathfinding adds workload.
+- Manual destinations remain available: Alt-click a Questie world-map icon, or use Questie's tracker waypoint action. `/path` opens navigation settings. Routes can be imperfect, and pathfinding adds workload.
+- Ext.9 mirrors Shortest Path's active walking route onto DS Forever's bottom-screen Home minimap and Map room. It reads the existing journey rather than running another planner. Missing, cancelled, paused or stale guidance must not leave an old trail on the map. Cross-map and transport gaps are not drawn as walking paths.
 - Separate app: **DS Forever Ext**, package `app.dsforever.ext`. Leave the original app installed.
 - Fork-only signing key and update channel. No upstream report-worker endpoint.
 
@@ -23,7 +24,7 @@ Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an 
 2. Install it beside DS Forever. Do not uninstall the original app.
 3. Select a **copy** of your WoW game folder. A shared folder also shares AddOns and WTF settings.
 4. Test the bundled driver first. Then open the launcher's **Menu → GPU driver** to import a driver ZIP, choose an imported driver, or choose System. Do not extract the ZIP yourself. Choose Bundled default if it fails.
-   For Questie and navigation setup, fully close WoW and start it through Ext.8 with internet access. Wait for setup to finish. Then check `/questie`, `/path`, and WoW's add-on settings. Focus a quest to start automatic guidance. Do not clear app data or uninstall to repair it.
+   For Questie and navigation setup, fully close WoW and start it through Ext.9 with internet access. Wait for setup to finish. Then check `/questie`, `/path`, and WoW's add-on settings. Focus a quest to start automatic guidance. Do not clear app data or uninstall to repair it.
 5. Report the Thor model, driver name, reproduction steps, and symptoms. Never attach login files or credentials.
 
 Driver ZIPs need Adrenotools `meta.json` and an ARM64 shared library. Windows/Linux installers, arbitrary Mesa source archives and drivers for incompatible GPUs are not supported. An accepted ZIP is not proof of hardware compatibility. System selection does not replace or modify Android's driver.

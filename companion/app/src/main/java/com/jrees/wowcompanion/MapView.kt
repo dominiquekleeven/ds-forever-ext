@@ -2331,6 +2331,7 @@ class MapView(context: Context) : View(context) {
     }
 
     fun update(m: JSONObject?, ageMs: Long) {
+        if (m == null) spfRoute.clear()
         map = m; staleMs = ageMs
         m?.let { noteMapChange(it.optInt("mapID", 0)) }
         addTrail(m?.optString("tr", null), -1L,  // the view is handed the map object itself
@@ -4550,6 +4551,8 @@ class MapView(context: Context) : View(context) {
     // (PolestarNav, Map.lua's row "pnav") and hands its route back here; the line follows Polestar's walking route for the focused
     // quest while one is live, else the app's own (and the map says why)
     val polestar = PolestarNav()
+    val spfRoute = SpfRoute()
+    private val spfPaint = SpfRoutePaint()
     /** the zone spots of a quest ([map, x, y, continent, wx, wy] each): the Map room's kept mapquests */
     var zoneSpots: ((Int) -> List<DoubleArray>)? = null
 
@@ -7724,7 +7727,21 @@ class MapView(context: Context) : View(context) {
         // map module instead of our arrow and dots"): its golden path as it draws it on the minimap, then on to its target; the module
         // and Home's small map; our line, dots and rim arrow give way to it
         goldenShown = false
-        if (!morphOn && !corpseKnown() && !px.isNaN() && !py.isNaN() && Settings.questTracking == "questtrail") {
+        val spfNow = android.os.SystemClock.elapsedRealtime()
+        val spfCont = map?.optInt("cont", -1) ?: -1
+        val spfOn = spfRoute.current(spfNow, spfCont) != null
+        if (spfOn && !morphOn) {
+            val r = rect
+            val walk = spfRoute.live(spfNow, map?.optDouble("wx", Double.NaN) ?: Double.NaN,
+                map?.optDouble("wy", Double.NaN) ?: Double.NaN, spfCont)
+            if (r != null && r.valid && walk != null && r.continent == walk.continent) {
+                val field = RectF(left, top + (if (compact) compactTop() else 0f), left + fw,
+                    top + fh - (if (hintsOn() && !compact) HINT_BAND else 0f))
+                spfPaint.draw(c, walk, field, spfNow) { wx, wy -> floatArrayOf(sx(r.nx(wy)), sy(r.ny(wx))) }
+                postInvalidateOnAnimation()
+            }
+        }
+        if (!spfOn && !morphOn && !corpseKnown() && !px.isNaN() && !py.isNaN() && Settings.questTracking == "questtrail") {
             val nb = top + (if (compact) compactTop() else 0f)
             val fb = top + fh - (if (hintsOn() && !compact) HINT_BAND else 0f)
             val save = c.save()
@@ -7735,11 +7752,11 @@ class MapView(context: Context) : View(context) {
             if (!goldenShown && target != null) drawQtTarget(c, sx(px), sy(py), sx(target.x), sy(target.y))
             c.restoreToCount(save)
         }
-        val route = if (!compact && !morphOn && !corpseKnown() && !px.isNaN() && !py.isNaN()) cursorRoute() else null
+        val route = if (!spfOn && !compact && !morphOn && !corpseKnown() && !px.isNaN() && !py.isNaN()) cursorRoute() else null
         // Polestar's own walking route for the focused quest, when it is the router and has one (b-route-polestar)
         val poleOn = Settings.questTracking == "polestar"
         val qtOn = Settings.questTracking == "questtrail"
-        if (goldenShown) {
+        if (spfOn || goldenShown) {
             pathFor = 0
         } else if (qtOn) {
             // QuestTrail mode (the user, test58: "instead of just showing the trail line"): never our dots, flags or words; its target
@@ -7817,7 +7834,7 @@ class MapView(context: Context) : View(context) {
         } else pathFor = 0
         // ---- HOME'S SMALL MAP: the focused quest's checkpoints too (test48: "I cannot see the checkpoint flags when the map module
         // is not full screen") - the flags, the stretch to the next one, faint dots past it; no words (the arrow and the module say them)
-        if (compact && !morphOn && !corpseKnown() && !px.isNaN() && !py.isNaN() && focusQid > 0 && Settings.questTracking == "safepath" &&
+        if (!spfOn && compact && !morphOn && !corpseKnown() && !px.isNaN() && !py.isNaN() && focusQid > 0 && Settings.questTracking == "safepath" &&
             !arrivedInFocusArea()) {
             routeFor(focusQid)?.let { r0 ->
                 val leg = dangerLeg(focusQid, r0)
@@ -7854,7 +7871,7 @@ class MapView(context: Context) : View(context) {
         // ---- HOME'S SMALL MAP, POLESTAR (the user, 2026-11-11: "the polestar option in quest tracking in home should also show the path
         // on the bottom map sort of like safe path does"): Polestar's own walking path, its gold dots, in the small field as SafePath's
         // checkpoints are above
-        if (compact && !morphOn && !corpseKnown() && !px.isNaN() && !py.isNaN() && Settings.questTracking == "polestar") {
+        if (!spfOn && compact && !morphOn && !corpseKnown() && !px.isNaN() && !py.isNaN() && Settings.questTracking == "polestar") {
             val nb = top + compactTop()
             val save = c.save()
             c.clipRect(left, nb, left + fw, top + fh)
@@ -7863,7 +7880,7 @@ class MapView(context: Context) : View(context) {
         }
         // ---- THE CORPSE RUN's way (CorpseRoute): while a ghost, the leg's checkpoint flags, the stretch to the next one and faint dots
         // past it (the quest line's look), on the full map and Home's small one; the red rim arrow leads to its next checkpoint
-        if (!morphOn && !px.isNaN() && !py.isNaN()) corpseLeg()?.takeIf { corpseRun.bent }?.let { leg ->
+        if (!spfOn && !morphOn && !px.isNaN() && !py.isNaN()) corpseLeg()?.takeIf { corpseRun.bent }?.let { leg ->
             val nb = top + (if (compact) compactTop() else 0f)
             val fb = top + fh - (if (hintsOn() && !compact) HINT_BAND else 0f)
             val save = c.save()
@@ -8125,7 +8142,7 @@ class MapView(context: Context) : View(context) {
         // test60: inside the focused quest's area the arrow goes (arrived); the corpse's stays
         // gp1: the guard's flag's arrow has its own arrival (guardTarget) and shows in QuestTrail mode too (it is no quest's)
         val toGuard = !toCorpse && guardArrow
-        if (!rimTX.isNaN() && !px.isNaN() && !py.isNaN() && !(Settings.questTracking == "questtrail" && !toCorpse && !toGuard) &&
+        if (!spfOn && !rimTX.isNaN() && !px.isNaN() && !py.isNaN() && !(Settings.questTracking == "questtrail" && !toCorpse && !toGuard) &&
             (toCorpse || toGuard || !arrivedInFocusArea())) {
             val tx = sx(bend?.get(0) ?: rimTX); val ty = sy(bend?.get(1) ?: rimTY)
             val inset = RIM_R + 6f

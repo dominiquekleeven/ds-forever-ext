@@ -2968,6 +2968,82 @@ do
 end
 
 -- ---------------------------------------------------------------- POLESTAR AS THE ROUTER (b-route-polestar)
+-- SPF_BOTTOM_ROUTE_BEGIN: read-only public API export, on the existing position/heartbeat path.
+-- Journey legs are already sliced at Journey.index and contain ENDS ONLY, not the walking bends.
+-- Guidance.waypoints is the real current source; Guidance.index is its current bend. Never join legs.
+do
+    local R = { checked = -math.huge, sent = -math.huge, signature = nil }
+    WC.spfRoute = R
+    local events = CreateFrame("Frame")
+    events:RegisterEvent("LOADING_SCREEN_ENABLED")
+    events:RegisterEvent("LOADING_SCREEN_DISABLED")
+    events:SetScript("OnEvent", function(_, event)
+        R.loading = event == "LOADING_SCREEN_ENABLED"
+        R.checked = -math.huge
+    end)
+    local function number(n) return type(n) == "number" and n == n and math.abs(n) < math.huge end
+    local function whole(n, lo, hi) return number(n) and n % 1 == 0 and n >= lo and n <= hi end
+    local function world(p)
+        if type(p) ~= "table" or not whole(p.map, 1, 100000) or not number(p.x) or not number(p.y)
+            or p.x < 0 or p.x > 1 or p.y < 0 or p.y > 1 then return end
+        local c, v = C_Map.GetWorldPosFromMapPos(p.map, CreateVector2D(p.x, p.y))
+        if not whole(c, 0, 100000) or not v then return end
+        local x, y = v:GetXY()
+        if not number(x) or not number(y) or math.abs(x) > 100000 or math.abs(y) > 100000 then return end
+        return c, math.floor(x * 100 + 0.5) / 100, math.floor(y * 100 + 0.5) / 100
+    end
+    local function read()
+        if R.loading then return end
+        local api = _G.ShortestPathForever and _G.ShortestPathForever.API
+        if type(api) ~= "table" or type(api.Journey) ~= "function" or type(api.Guidance) ~= "function" then return end
+        local j = api.Journey()
+        if type(j) ~= "table" or j.guided ~= true or not whole(j.index, 1, 4096)
+            or type(j.legs) ~= "table" or #j.legs > 128 or type(j.legs[1]) ~= "table" or j.legs[1].mode ~= "walk" then return end
+        local g = api.Guidance()
+        if type(g) ~= "table" or g.leg ~= j.index or g.owner ~= j.owner or type(g.waypoints) ~= "table"
+            or #g.waypoints > 4096 or not whole(g.index, 1, #g.waypoints) then return end
+        local c, nx, ny = world(g.point)
+        if not c then return end
+        local first = math.max(1, g.index - 1)
+        local last = math.min(#g.waypoints, first + 239)
+        local points = {}
+        -- index 1 has no previous source point. Start at the live player, not an invented old origin.
+        if g.index == 1 then
+            local x, y, _, pc = UnitPosition("player")
+            if pc ~= c or not number(x) or not number(y) or math.abs(x) > 100000 or math.abs(y) > 100000 then return end
+            points[1], points[2] = math.floor(x * 100 + 0.5) / 100, math.floor(y * 100 + 0.5) / 100
+            last = math.min(last, 239)
+        end
+        for i = first, last do
+            local pc, x, y = world(g.waypoints[i])
+            -- A broken projection or continent transition is a gap, never a straight connector.
+            if pc ~= c then return end
+            points[#points + 1], points[#points + 2] = x, y
+        end
+        if #points < 4 or points[3] ~= nx or points[4] ~= ny then return end
+        return { type = "spfroute", v = "sr1", on = true, c = c, leg = j.index, p = points, n = { nx, ny } }
+    end
+    function R.tick()
+        local now = GetTime()
+        if now >= R.checked and now - R.checked < 1 then return end
+        R.checked = now
+        local ok, doc = pcall(read)
+        if not ok or not doc then doc = { type = "spfroute", v = "sr1", on = false } end
+        -- The bounded encoded document is its signature, including ALL intermediate bends.
+        local encoded = WC.encode(doc)
+        if #encoded > 12000 then encoded = WC.encode({ type = "spfroute", v = "sr1", on = false }) end
+        if encoded ~= R.signature or (doc.on and (now < R.sent or now - R.sent >= 5)) then
+            R.signature, R.sent = encoded, now
+            WC.send(encoded) -- the existing position ticker / heartbeat flushes; no independent timer or forced snapshot
+        end
+    end
+    local pos = WC.collectPos
+    function WC.collectPos(...) R.tick(); return pos(...) end
+    local map = WC.collectMap
+    function WC.collectMap(...) R.tick(); return map(...) end
+end
+-- SPF_BOTTOM_ROUTE_END
+
 -- Retired in Ext: Questie has no Polestar guide/step API. Do not register its pad, timers or automation.
 if false then
 -- The user (2026-10-17): "Quest tracking: Vanilla | QuestTrail | Polestar", the setting deciding what the map's line and arrows follow;

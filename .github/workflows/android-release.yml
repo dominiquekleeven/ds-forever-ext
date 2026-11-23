@@ -32,6 +32,7 @@ jobs:
         env:
           TRADE_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
           ADDON_TILES_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
+          BOTTOM_ROUTE_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
         run: |
           bash gradlew --no-daemon --no-configuration-cache --max-workers=2 \
             -Dorg.gradle.parallel=false '-Dorg.gradle.jvmargs=-Xmx5g -Dfile.encoding=UTF-8' \
@@ -39,7 +40,8 @@ jobs:
             :app:testModernDebugUnitTest --tests '*WowGpuDriversTest' --tests '*OutputFpsTest' \
             --tests '*GameFpsTest' --tests '*FpsCounterTest' --tests '*PerformanceTilesRoomTest' \
             --tests '*GpuDriverMenuUiTest' --tests '*WowGpuDriverControllerTest' --tests '*StartMenuShotsTest' \
-            --tests '*AddonTilesRoomTest.navigationUsesTheExistingCardAndCanBeRemovedWithoutChangingQuestie'
+            --tests '*AddonTilesRoomTest.navigationUsesTheExistingCardAndCanBeRemovedWithoutChangingQuestie' \
+            --tests '*BottomRouteShotsTest'
       - name: Test Questie replacement and Ext update channel
         if: ${{ !cancelled() }}
         env:
@@ -64,7 +66,7 @@ jobs:
             --tests '*ImportedAddonsTest' --tests '*PcAddonsWantTest' --tests '*SettingsTabsTest' \
             --tests '*PerformanceTileModelTest' --tests '*GpuDriverMenuTest' \
             --tests '*QuestieStartupTest' --tests '*DependencyQuestieTest' --tests '*AddonBackupsTest' \
-            --tests '*NavigationStartupTest'
+            --tests '*NavigationStartupTest' --tests '*SpfRouteTest'
       - name: Test bundled Lua and add-on manifest
         if: ${{ !cancelled() }}
         env:
@@ -78,6 +80,7 @@ jobs:
           test -s "$QUESTIE_BUNDLE_ZIP"
           test -s "$SHORTEST_PATH_FOREVER_ZIP"
           "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_navigation.py -v
+          "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_bottom_route.py -v
       - name: Restore fork signing identity
         env:
           KEYSTORE: ${{ secrets.EXT_KEYSTORE_BASE64 }}

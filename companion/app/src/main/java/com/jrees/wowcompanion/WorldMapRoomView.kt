@@ -787,6 +787,8 @@ class WorldMapRoomView(context: Context) : View(context) {
     private var padDoc: JSONObject? = null
     private var qdbPins: QdbPins.Pins? = null
     private var qdbNodes: QdbPins.Nodes? = null
+    val spfRoute = SpfRoute()
+    private val spfPaint = SpfRoutePaint()
 
     /** the full map document (MainActivity's "full" route) */
     fun update(m: JSONObject) {
@@ -801,6 +803,8 @@ class WorldMapRoomView(context: Context) : View(context) {
 
     /** a position document: the player moves on the map; nothing else changes */
     fun updatePos(pos: JSONObject) {
+        // Route progress is in world yards, not the current zone's map fractions.
+        for (k in listOf("wx", "wy", "cont")) if (pos.has(k)) mapDoc?.put(k, pos.get(k))
         val mid = pos.optInt("mapID", playerMap)
         if (mid != playerMap) { playerMap = mid; mapDoc?.put("mapID", mid) }
         px = pos.optDouble("x", Double.NaN).toFloat(); py = pos.optDouble("y", Double.NaN).toFloat()
@@ -1712,6 +1716,7 @@ class WorldMapRoomView(context: Context) : View(context) {
         c.save()
         c.clipRect(canvasR)
         drawArt(c)
+        drawSpfRoute(c)
         if (isZoneView()) drawZoneMarks(c) else { drawChildren(c); drawLayerQuests(c) }
         drawWaypoint(c)
         drawGossipPoi(c)
@@ -2209,6 +2214,26 @@ class WorldMapRoomView(context: Context) : View(context) {
         dst.set(cx - art.width * sc / 2f, cy - art.height * sc / 2f, cx + art.width * sc / 2f, cy + art.height * sc / 2f)
         c.drawBitmap(art, null, dst, pBmp)
         c.restore()
+    }
+
+    private fun drawSpfRoute(c: Canvas) {
+        val m = mapDoc ?: return
+        val now = SystemClock.elapsedRealtime()
+        val walk = spfRoute.live(now, m.optDouble("wx", Double.NaN), m.optDouble("wy", Double.NaN), m.optInt("cont", -1)) ?: return
+        // A world view can contain several continent assignments. Project through the same assignment as the art.
+        val w = model.world(shown)
+        val assign = model.assignOf(shown, walk.continent)
+        if (assign == null && (w == null || !w.valid || w.continent != walk.continent)) return
+        val field = RectF(canvasR.left, max(canvasR.top, artR.top), min(canvasR.right, drawerLeft()), min(canvasR.bottom, artR.bottom))
+        if (field.width() <= 28f || field.height() <= 28f) return
+        spfPaint.draw(c, walk, field, now) { wx, wy ->
+            if (assign != null) {
+                val u = assign.u(wy)
+                val v = assign.v(wx)
+                floatArrayOf(sx(u.toFloat()), sy(v.toFloat()))
+            } else floatArrayOf(sx(w!!.nx(wy).toFloat()), sy(w.ny(wx).toFloat()))
+        }
+        postInvalidateOnAnimation()
     }
 
     /** the filter funnel (top right) and the panel toggle (bottom right), the game's own pieces when the kit has them */

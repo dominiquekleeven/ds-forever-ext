@@ -2646,6 +2646,12 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
         runCatching { DiagLog.doc(msg) }
         // first, for every document: is the game live, and is a text box open over there
         val current = GameInput.note(msg)
+        // Never carry a route across login/reload, logout or a loading screen. Replays cannot create live guidance.
+        if (current && (msg.optString("type") in listOf("hello", "bye") ||
+                (msg.optString("type") == "load" && msg.optBoolean("on")))) {
+            mapView.spfRoute.clear(); worldMapRoom.spfRoute.clear()
+            mapView.invalidate(); worldMapRoom.invalidate()
+        }
         docCurrent = current
         if (current) lastAddonAt = SystemClock.elapsedRealtime()           // the clean exit's "past the login screen"
         if (current) docLiveAt = System.currentTimeMillis()                // StartRoute: the add-ons speak in this game run
@@ -2822,6 +2828,12 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
                 mapView.invalidate()
             }
             "pnavroute" -> if (current) { mapView.polestar.onRoute(msg, SystemClock.elapsedRealtime()); mapView.invalidate() }
+            "spfroute" -> if (current) {
+                val now = SystemClock.elapsedRealtime()
+                mapView.spfRoute.onDoc(msg, now); worldMapRoom.spfRoute.onDoc(msg, now)
+                mapView.invalidate(); worldMapRoom.invalidate()
+                mapView.postInvalidateDelayed(SpfRoute.STALE_MS + 1); worldMapRoom.postInvalidateDelayed(SpfRoute.STALE_MS + 1)
+            }
             "pqol" -> if (current) { PolestarQol.onDoc(msg); if (::settingsView.isInitialized) settingsView.postInvalidate() }     // pq1: Polestar's automation
             "pstep" -> if (current) { mapView.onPolestarStep(msg); if (room == Room.MAP) worldMapRoom.postInvalidate() }   // ps1: the light blue row
             // pg1: the Polestar tab (Map.lua WC.pg); pguide also heads Home's list and the Map room's ("Polestar · <zone>", D6)
