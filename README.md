@@ -1,7 +1,8 @@
 # DS Forever Ext
 
 Test fork of [DS Forever](https://github.com/Jreese702/DS-Forever) for AYN Thor.
-Adds a saved custom Turnip driver selector and replaces Polestar with Questie.
+Adds saved Adrenotools driver ZIP selection (Turnip, Qualcomm and other compatible
+packages), a system-driver option, and replaces Polestar with Questie.
 
 **[Download the test APK](https://github.com/dominiquekleeven/ds-forever-ext/releases)** · [Test instructions and limits](RELEASE_EXT.md)
 

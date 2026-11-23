@@ -69,16 +69,19 @@ internal fun WowGpuDriverButton(enabled: Boolean, onOpenChanged: (Boolean) -> Un
                 OutlinedButton(enabled = !busy, onClick = { save(null) }) {
                     Text(if (selected == null) "Selected: Bundled default" else "Reset to Bundled default")
                 }
+                OutlinedButton(enabled = !busy, onClick = { save(WowGpuDrivers.SYSTEM) }) {
+                    Text(if (selected == WowGpuDrivers.SYSTEM) "Selected: System driver" else "Use System driver")
+                }
                 drivers.forEach { driver ->
                     OutlinedButton(enabled = !busy && adreno, onClick = { save(driver.id) }) {
                         Text(if (selected == driver.id) "Selected: ${driver.label}" else driver.label)
                     }
                 }
-                if (selected != null && drivers.none { it.id == selected }) Text("Saved driver is unavailable. Reset or import it again.")
-                Text("Custom Turnip drivers require an Adreno GPU and an ARM64 Adrenotools ZIP. Only import from a source you trust. A valid ZIP may still be incompatible with your GPU; reset if the game fails to start.")
-                if (!adreno) Text("Custom Turnip import is unavailable: no Adreno GPU detected.")
+                if (selected != null && selected != WowGpuDrivers.SYSTEM && drivers.none { it.id == selected }) Text("Saved driver is unavailable. Reset or import it again.")
+                Text("Import compatible ARM64 Adrenotools driver ZIPs, including Mesa Turnip and Qualcomm Adreno packages. Not Windows/Linux installers or arbitrary Mesa archives. Only import from a source you trust. A valid ZIP may still be incompatible with your GPU; reset if the game fails to start. System driver uses Android's installed driver without replacing it.")
+                if (!adreno) Text("Custom driver import is unavailable: no Adreno GPU detected.")
                 OutlinedButton(enabled = !busy && adreno, onClick = { picker.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed")) }) {
-                    Text("Import Turnip ZIP")
+                    Text("Import driver ZIP")
                 }
                 message?.let { Text(it) }
             }

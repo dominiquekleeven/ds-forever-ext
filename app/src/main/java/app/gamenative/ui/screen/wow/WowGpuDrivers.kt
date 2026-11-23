@@ -12,7 +12,9 @@ import java.util.zip.ZipInputStream
 internal object WowGpuDrivers {
     private const val PREFS = "wow_gpu_drivers"
     private const val KEY = "selected"
-    private const val PREFIX = "Turnip-custom-"
+    private const val PREFIX = "Adreno-custom-"
+    private const val LEGACY_PREFIX = "Turnip-custom-"
+    const val SYSTEM = "System"
     private const val MAX_BYTES = 256L * 1024 * 1024
     private const val MAX_ENTRIES = 256
 
@@ -23,20 +25,21 @@ internal object WowGpuDrivers {
     fun selected(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
 
     fun select(context: Context, id: String?) {
-        require(id == null || installed(context).any { it.id == id }) { "Driver is no longer installed. Import it again." }
+        require(id == null || id == SYSTEM || installed(context).any { it.id == id }) { "Driver is no longer installed. Import it again." }
         check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
             if (id == null) remove(KEY) else putString(KEY, id)
         }.commit()) { "Could not save the GPU driver choice." }
     }
 
     fun installed(context: Context): List<Driver> = root(context).listFiles().orEmpty()
-        .filter { it.isDirectory && it.name.startsWith(PREFIX) }
+        .filter { it.isDirectory && (it.name.startsWith(PREFIX) || it.name.startsWith(LEGACY_PREFIX)) }
         .mapNotNull { dir -> runCatching { Driver(dir.name, validate(dir, Build.VERSION.SDK_INT)) }.getOrNull() }
         .sortedBy { it.label }
 
     // Resolve at launch, not composition: every restart uses the last saved choice.
     fun resolve(context: Context, bundled: String): String {
         val id = selected(context) ?: return bundled
+        if (id == SYSTEM) return SYSTEM
         check(installed(context).any { it.id == id }) {
             "Saved GPU driver is missing or invalid. Open GPU driver and reset to Bundled default, or import it again."
         }
@@ -84,7 +87,8 @@ internal object WowGpuDrivers {
                 }
             }
             val label = validate(stage, sdk)
-            val id = PREFIX + UUID.randomUUID()
+            // The loader uses name markers such as Turnip and v762 for its existing compatibility workarounds.
+            val id = PREFIX + label.replace(Regex("[^A-Za-z0-9._-]"), "_").take(120) + "-" + UUID.randomUUID()
             check(stage.renameTo(File(root, id))) { "Could not save the imported driver." }
             return Driver(id, label)
         } finally {
@@ -97,8 +101,8 @@ internal object WowGpuDrivers {
         check(meta.isFile && meta.length() in 1..65536) { "ZIP needs meta.json at its root." }
         val json = JSONObject(meta.readText())
         val name = json.getString("name").trim()
-        check(name.isNotEmpty() && name.length <= 200 && name.contains("turnip", ignoreCase = true)) {
-            "Import a Turnip Adrenotools driver ZIP."
+        check(name.isNotEmpty() && name.length <= 200 && name.none { it.isISOControl() }) {
+            "Driver metadata needs a name of 1–200 characters without control characters."
         }
         check(json.getInt("schemaVersion") == 1) { "Unsupported driver metadata schema." }
         check(json.getInt("minApi") in 1..sdk) { "Driver requires a newer Android version." }

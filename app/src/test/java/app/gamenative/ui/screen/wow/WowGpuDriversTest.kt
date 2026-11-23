@@ -92,7 +92,8 @@ class WowGpuDriversTest {
         reject(zip("meta.json" to meta()))
         reject(zip("meta.json" to meta(minApi = 35), "libvulkan_freedreno.so" to elf()))
         reject(zip("meta.json" to meta(), "libvulkan_freedreno.so" to elf().apply { this[18] = 0x3e }))
-        reject(zip("meta.json" to meta(name = "Other Vulkan driver"), "libvulkan_freedreno.so" to elf()))
+        reject(zip("meta.json" to meta(name = " "), "libvulkan_freedreno.so" to elf()))
+        reject(zip("meta.json" to meta(name = "Bad\u0000driver"), "libvulkan_freedreno.so" to elf()))
     }
 
     @Test fun tooManyEntriesAndOversizedMetadataAreRejected() {
@@ -114,5 +115,39 @@ class WowGpuDriversTest {
         }
         WowGpuDrivers.select(context, null)
         assertEquals("bundled", WowGpuDrivers.resolve(context, "bundled"))
+    }
+
+    @Test fun qualcommAndOtherAdrenotoolsPackagesDoNotNeedTurnipInTheirName() {
+        val qualcomm = WowGpuDrivers.importZip(context, zip(
+            "meta.json" to meta(name = "Qualcomm Adreno v762", library = "vulkan.adreno.so"),
+            "vulkan.adreno.so" to elf(),
+        ))
+        assertEquals("Qualcomm Adreno v762", qualcomm.label)
+        assertTrue("Keep loader compatibility markers", qualcomm.id.contains("v762"))
+        assertFalse("Do not apply Turnip-specific handling to Qualcomm", qualcomm.id.contains("Turnip"))
+        WowGpuDrivers.select(context, qualcomm.id)
+        assertEquals(qualcomm.id, WowGpuDrivers.resolve(context, "bundled"))
+        val other = WowGpuDrivers.importZip(context, zip(
+            "meta.json" to meta(name = "Other Adrenotools Vulkan driver"), "libvulkan_freedreno.so" to elf(),
+        ))
+        assertTrue(WowGpuDrivers.installed(context).contains(other))
+    }
+
+    @Test fun systemDriverChoicePersistsWithoutImportAndCanReset() {
+        WowGpuDrivers.select(context, WowGpuDrivers.SYSTEM)
+        assertEquals("System", WowGpuDrivers.selected(context))
+        assertEquals("System", WowGpuDrivers.resolve(context, "bundled-a7xx"))
+        assertEquals("System", WowGpuDrivers.resolve(context, "bundled-a6xx"))
+        WowGpuDrivers.select(context, null)
+        assertEquals("bundled-a7xx", WowGpuDrivers.resolve(context, "bundled-a7xx"))
+    }
+
+    @Test fun firstReleaseTurnipImportsAndSavedChoicesRemainUsable() {
+        val imported = WowGpuDrivers.importZip(context, validZip())
+        val legacyId = "Turnip-custom-legacy"
+        assertTrue(File(root, imported.id).renameTo(File(root, legacyId)))
+        assertEquals(listOf(WowGpuDrivers.Driver(legacyId, imported.label)), WowGpuDrivers.installed(context))
+        WowGpuDrivers.select(context, legacyId)
+        assertEquals(legacyId, WowGpuDrivers.resolve(context, "bundled"))
     }
 }
