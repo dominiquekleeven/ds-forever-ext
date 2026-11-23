@@ -3,7 +3,7 @@
 Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an official upstream release.
 
 - Choose the bundled GPU driver, Android's system driver, or an imported compatible ARM64 Adrenotools driver ZIP. Turnip is not required in its name: Qualcomm Adreno and other compatible packages are accepted too.
-- Existing driver imports and saved selections remain usable. Ext.4 is a same-key update; do not uninstall an earlier Ext build.
+- Existing driver imports and saved selections remain usable. Ext.5 is a same-key update; do not uninstall an earlier Ext build.
 - GPU driver controls now belong in the existing launcher **Menu → GPU driver**, with the app's own theme and controller navigation. The separate top-screen button and Material driver dialog are removed.
 - **WoW FPS counter (Ctrl+R)**: bottom-screen **Settings → Performance → Frame limit → Toggle**. The same action is available in the controller command chooser. It does not change existing bindings or frame limits.
 - The existing **Performance HUD** now separates **Game FPS** (WoW's `GetFramerate()`, before interpolation) from **Output FPS (presents)** (measured renderer/layer output, including generated frames when active). Enable Performance HUD in the launcher's quick menu. Missing or stale measurements say **unavailable**, never game FPS multiplied by a configured factor. Successful renderer presents are not a physical display scanout measurement.

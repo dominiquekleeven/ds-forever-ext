@@ -18,7 +18,7 @@ object GpuDriverPanel {
         fun text(words: String, height: Float, size: Float, color: Int = Theme.text) {
             val p = UiKit.bodyPaint(size * k).apply { textAlign = Paint.Align.CENTER }
             val label = TextUtils.ellipsize(words, android.text.TextPaint(p), right - left, TextUtils.TruncateAt.END).toString()
-            UiKit.outlined(c, label, panel.centerX(), y + height / 2f - (p.ascent() + p.descent()) / 2f, p.textSize, color)
+            UiKit.outlined(c, label, panel.centerX(), y + height / 2f, p.textSize, color)
             y += height
         }
         val title = UiKit.titlePaint(48f * k).apply { textAlign = Paint.Align.CENTER }
@@ -27,6 +27,7 @@ object GpuDriverPanel {
         val state = GpuDriverMenu.state
         text("Selected: ${state.selectedLabel}", 44f * k, 30f)
         text("Saved for the next launch. No change to the running game.", 40f * k, 27f, Theme.dim)
+        y += 8f * k
         fun button(r: RectF, word: String, id: Int, selected: Boolean = false) {
             val enabled = GpuDriverMenu.enabled(id)
             val p = UiKit.bodyPaint(36f * k)
@@ -54,6 +55,7 @@ object GpuDriverPanel {
         button(RectF(mid + gap / 2, y, right, y + 64f * k), "Next", GpuDriverMenu.NEXT)
         y += 68f * k
         text("${GpuDriverMenu.page + 1} / ${GpuDriverMenu.pageCount}", 34f * k, 26f, Theme.dim)
+        y += 4f * k
         button(RectF(left, y, mid - gap / 2, y + 88f * k), if (state.busy) "Please wait…" else "Import ZIP", GpuDriverMenu.IMPORT)
         button(RectF(mid + gap / 2, y, right, y + 88f * k), "Back", GpuDriverMenu.BACK)
         y += 102f * k
