@@ -94,6 +94,9 @@ class StartView(context: Context) : View(context) {
             val top = height - ROW_DOWN - BUTTON_H
             val left = (width - StartMenu.WIDTH) / 2f
             StartMenu.draw(c, RectF(left, GAP, left + StartMenu.WIDTH, top - GAP), pressed, hits, RectF(SIDE_M, top, SIDE_M + SIDE_W, top + BUTTON_H), game = true)
+            if (!GpuDriverMenu.open) hits.firstOrNull { it.second == StartMenu.focusId() }?.first?.let { r ->
+                UiKit.focus(c, RectF(r.left - 6f, r.top - 6f, r.right + 6f, r.bottom + 6f))
+            }
         }
     }
 

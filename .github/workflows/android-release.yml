@@ -2,6 +2,11 @@ name: Android test release
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a prerelease after all build and test gates pass
+        type: boolean
+        default: false
   push:
     tags: ['v*-ext.*']
 
@@ -24,12 +29,15 @@ jobs:
       - name: Build pinned runtime prerequisites
         run: bash tools/ci_bootstrap.sh
       - name: Test drivers and independent FPS measurements
+        env:
+          TRADE_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
         run: |
           bash gradlew --no-daemon --no-configuration-cache --max-workers=2 \
             -Dorg.gradle.parallel=false '-Dorg.gradle.jvmargs=-Xmx5g -Dfile.encoding=UTF-8' \
             -Pkotlin.compiler.execution.strategy=in-process \
             :app:testModernDebugUnitTest --tests '*WowGpuDriversTest' --tests '*OutputFpsTest' \
-            --tests '*GameFpsTest' --tests '*PerformanceTilesRoomTest'
+            --tests '*GameFpsTest' --tests '*PerformanceTilesRoomTest' \
+            --tests '*GpuDriverMenuUiTest' --tests '*WowGpuDriverControllerTest' --tests '*StartMenuShotsTest'
       - name: Test Questie replacement and Ext update channel
         if: ${{ !cancelled() }}
         run: |
@@ -39,7 +47,7 @@ jobs:
             :dsforever:testDebugUnitTest --tests '*QuestieReplacementTest' --tests '*ExtUpdateTest' \
             --tests '*AddonsReenableTest' --tests '*PolestarGuideTest' --tests '*ThirdPartyAddonsTest' \
             --tests '*ImportedAddonsTest' --tests '*PcAddonsWantTest' --tests '*SettingsTabsTest' \
-            --tests '*PerformanceTileModelTest'
+            --tests '*PerformanceTileModelTest' --tests '*GpuDriverMenuTest'
       - name: Test bundled Lua and add-on manifest
         if: ${{ !cancelled() }}
         run: |
@@ -76,6 +84,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
+          name: menu-ui-screenshots
+          path: ${{ runner.temp }}/ds-ext-menu-shots/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
           name: test-reports
           path: |
             app/build/test-results/
@@ -87,7 +101,7 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/ext-release.p12"
   release:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish)
     needs: build
     runs-on: ubuntu-24.04
     permissions:
@@ -98,9 +112,29 @@ jobs:
         with:
           name: ds-forever-ext-apk
           path: dist
-      - name: Publish test release
+      - name: Verify release receipt
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --prerelease \
-            --title "DS Forever Ext $GITHUB_REF_NAME" --notes-file RELEASE_EXT.md
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          receipt = json.loads(Path('dist/BUILD.json').read_text())
+          assert receipt['commit'] == os.environ['GITHUB_SHA']
+          assert receipt['repository'] == os.environ['GITHUB_REPOSITORY']
+          assert receipt['package'] == 'app.dsforever.ext'
+          version = receipt['version']
+          apk = Path('dist') / f'DS-Forever-{version}.apk'
+          assert hashlib.sha256(apk.read_bytes()).hexdigest() == receipt['sha256']
+          tag = f'v{version}'
+          ref = os.environ['GITHUB_REF']
+          assert not ref.startswith('refs/tags/') or ref == f'refs/tags/{tag}'
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'RELEASE_TAG={tag}\n')
+          PY
+      - name: Upload verified APK without a local transfer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/* --target "$GITHUB_SHA" --prerelease \
+            --title "DS Forever Ext $RELEASE_TAG" --notes-file RELEASE_EXT.md

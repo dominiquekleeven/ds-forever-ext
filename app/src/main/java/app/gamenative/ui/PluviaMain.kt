@@ -332,6 +332,7 @@ fun PluviaMain(
                 startDestination = startDestination,
             ) {
                 composable(route = PluviaScreen.WoWLauncher.route) {
+                    app.gamenative.ui.screen.wow.WowGpuDriverMenu()
                     // the start-up chooser (Local / Streaming) first; Local = today's start screen, unchanged
                     DsStartScreen { WoWForeverScreen(
                         onLaunch = { appId ->

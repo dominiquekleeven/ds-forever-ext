@@ -16,6 +16,8 @@ object StartKeys {
     /** [code] down ([first] = not a repeat) or up: true = a start-up page took it */
     fun route(code: Int, down: Boolean, first: Boolean): Boolean {
         val d = down && first
+        // The same menu also appears on the local waiting screen, where the chooser is not active.
+        if (StartMenu.key(code, d)) return true
         return ModeBridge.key(code, d) || SetupBridge.key(code, d)
     }
 

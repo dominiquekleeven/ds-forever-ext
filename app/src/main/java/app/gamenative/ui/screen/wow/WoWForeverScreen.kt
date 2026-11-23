@@ -100,7 +100,10 @@ fun WoWForeverScreen(
     var gamePath by remember { mutableStateOf(GamePath.load(context)) }
     var files by remember { mutableStateOf(GamePath.Status()) }
     var isLaunching by remember { mutableStateOf(false) }
-    var driverSettingsOpen by remember { mutableStateOf(false) }
+    SideEffect { com.jrees.wowcompanion.GpuDriverMenu.launching = isLaunching }
+    DisposableEffect(Unit) {
+        onDispose { com.jrees.wowcompanion.GpuDriverMenu.launching = false }
+    }
     var launchJob by remember { mutableStateOf<Job?>(null) }
     var statusText by remember { mutableStateOf(READY_STATUS) }
     var isHarvesting by remember {
@@ -287,7 +290,11 @@ fun WoWForeverScreen(
 
     /** [by] = who launches ("play": the bottom's Play / auto-launch, "restart": the restart's own) - the restart's log names it */
     fun launchGame(by: String = "play") {
-        if (driverSettingsOpen) return
+        if (com.jrees.wowcompanion.GpuDriverMenu.holdsLaunch || com.jrees.wowcompanion.StartMenu.open) {
+            // Stay at Play after browsing/importing, not behind an auto-launch splash or an unexpected delayed launch.
+            PluviaApp.events.emit(AndroidEvent.ClearBootingSplash)
+            return
+        }
         val restart = com.jrees.wowcompanion.SetupBridge.restarting
         fun refused(why: String) {
             if (restart) com.jrees.wowcompanion.SetupBridge.log?.invoke("restart: Play by $by refused ($why)")
@@ -1068,9 +1075,6 @@ fun WoWForeverScreen(
             update = { it.error = errorMessage },
             modifier = Modifier.fillMaxSize(),
         )
-        Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
-            WowGpuDriverButton(enabled = !isLaunching) { driverSettingsOpen = it }
-        }
     }
 
 }

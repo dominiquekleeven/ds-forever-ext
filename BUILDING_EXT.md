@@ -5,6 +5,9 @@
 Run **Android test release** from the Actions tab. A successful manual run produces
 the `ds-forever-ext-apk` artifact. It includes the APK, `SHA256SUMS`, signing
 certificate details and a build receipt.
+Select **publish** to publish the verified APK directly from Actions after all
+gates pass. This avoids downloading and re-uploading the large APK locally.
+Leave it off for an artifact-only test build.
 
 Pushing a tag such as `v1.0.37-ext.2` builds, tests and publishes a prerelease.
 First update `versionName` and increase `versionCode` in `app/build.gradle.kts`.
