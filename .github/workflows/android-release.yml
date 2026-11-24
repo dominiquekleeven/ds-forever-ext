@@ -100,6 +100,7 @@ jobs:
           "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_bottom_route.py -v
           "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_focus_menu.py -v
           "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_logout_save.py -v
+          "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_addon_hotpaths.py -v
           # The old HUD-switch script expects Polestar windows; Ext's Questie retirement checks replace that assumption.
           for test in test_controller_situations test_chooser_grid test_realm_key test_roombar_mirror test_combat_top_flag test_pad_order test_map_stale_pend test_aura_container; do
             "$RUNNER_TEMP/lua-tests/bin/python" -B "tools/$test.py"

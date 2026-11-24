@@ -22,7 +22,7 @@ local WC = _G.WowCompanion
 local SAMPLE_DT = 1 / 30
 local MAX_SAMPLES = 90              -- 3 s of history; a drain normally takes 3
 
-local ring, count = {}, 0
+local ring, count, head = {}, 0, 1
 local acc = 0
 local lastT = nil
 local mapID = nil
@@ -41,11 +41,11 @@ f:SetScript("OnUpdate", function(_, elapsed)
     if count >= MAX_SAMPLES then
         -- Drop the OLDEST, never the newest: if the app has stopped reading we would rather
         -- hand it a short recent history than a long stale one.
-        table.remove(ring, 1)
-        count = count - 1
+        head = head % MAX_SAMPLES + 1
+    else
+        count = count + 1
     end
-    count = count + 1
-    ring[count] = { dt = dt, x = x, y = y, f = GetPlayerFacing() or 0 }
+    ring[(head + count - 2) % MAX_SAMPLES + 1] = { dt = dt, x = x, y = y, f = GetPlayerFacing() or 0 }
 end)
 
 --- The map the sampler should ask about. Set from the position ticker, which already knows.
@@ -61,15 +61,16 @@ function WC.drainTrail()
     if count == 0 then return nil end
     local parts = {}
     for i = 1, count do
-        local s = ring[i]
+        local index = (head + i - 2) % MAX_SAMPLES + 1
+        local s = ring[index]
         parts[i] = string.format("%d,%d,%d,%d",
             math.floor(s.dt * 1000 + 0.5),
             math.floor(s.x * 10000 + 0.5),
             math.floor(s.y * 10000 + 0.5),
             math.floor((s.f or 0) * 1000 + 0.5))
-        ring[i] = nil
+        ring[index] = nil
     end
-    count = 0
+    count, head = 0, 1
     return table.concat(parts, ";")
 end
 
@@ -6004,6 +6005,8 @@ do
         local rec = A and A.last
         R.full = nil
         local on = R.wanted() and rec and type(rec.m) == "table" and not A.off
+        if not on and R.inactive then return end
+        if on then R.inactive = false end
         local seen = {}
         R.n = 0
         R.why = {}
@@ -6037,6 +6040,7 @@ do
                     local r = R.radius(num(m.lv), plv)
                     e.st = R.state(e.d, r, e.st)
                     local o = tint(m.s)
+                    o.active = true
                     -- at7 (the user: "The aggro tint is still showing hovering over targeted mobs instead of on the target frame"): the
                     -- TARGET's tint goes round Hub's target bar while it shows (the same HUD bar outline), never over its plate
                     local okT, isT = pcall(function() return UnitIsUnit(st.tok, "target") == true end)
@@ -6117,13 +6121,15 @@ do
             end
         end
         for s, o in pairs(R.list) do
-            if not seen[s] then
+            if not seen[s] and o.active then
                 if o.f:IsShown() then o.f:Hide() end
                 o.a, o.plate = 0, nil
                 o.f:ClearAllPoints()
                 R.est[s] = nil
+                o.active = nil
             end
         end
+        R.inactive = not on
     end
 
     local f = CreateFrame("Frame")
