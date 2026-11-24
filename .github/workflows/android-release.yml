@@ -21,6 +21,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check parallel release gates
         run: python3 tools/test_ci_workflow.py
+      - name: Check bundled addon manifest before building
+        run: python3 -c 'from pathlib import Path; from tools.build_release import verify_addon_manifest; verify_addon_manifest(Path("companion"))'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -124,6 +126,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - name: Check bundled addon manifest before building
+        run: python3 -c 'from pathlib import Path; from tools.build_release import verify_addon_manifest; verify_addon_manifest(Path("companion"))'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
