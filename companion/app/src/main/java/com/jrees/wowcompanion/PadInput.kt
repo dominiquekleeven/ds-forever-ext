@@ -66,6 +66,8 @@ class PadInput(
      * Main thread.
      */
     private val onStickVector: (stick: Int, x: Float, y: Float) -> Unit = { _, _, _ -> },
+    /** Ownership yielded: cancel held gestures, never treat it as release-to-pick. */
+    private val onCancel: (() -> Unit)? = null,
 ) {
     /** exchange LT and RT for THIS subscriber (CastSettings.triggerSwap, now fixed false). Main thread. */
     var triggerSwap = false
@@ -79,7 +81,7 @@ class PadInput(
     }
 
     /** D-pad / face slots held right now (0 while stopped). Main thread. */
-    val buttons: Int get() = if (active) PadHub.buttons else 0
+    val buttons: Int get() = if (active && !PadHub.inputBlocked) PadHub.buttons else 0
 
     /** true while the physical button at [slot] (SLOT_x) is held. Main thread. */
     fun isHeld(slot: Int): Boolean = isHeld(buttons, slot)
@@ -107,6 +109,11 @@ class PadInput(
     internal fun stick(sector: Int) = onStick(sector)
     internal fun leftStick(sector: Int) = onLeftStick(sector)
     internal fun vector(stick: Int, x: Float, y: Float) = onStickVector(stick, x, y)
+    internal fun cancelHeld() {
+        onCancel?.let { it(); return }
+        onPad(false, false, false, false); onButtons(0); onStick(-1); onLeftStick(-1)
+        onStickVector(0, 0f, 0f); onStickVector(1, 0f, 0f)
+    }
 
     companion object {
         const val CONTROLLER_NAME = PadReader.CONTROLLER_NAME
@@ -130,6 +137,17 @@ class PadInput(
 
 /** The one reader behind every [PadInput]; main thread only. */
 internal object PadHub {
+    private val menuGate = NativeMenuInputGate()
+    val inputBlocked: Boolean get() = menuGate.blocked
+    var gameMenuLocked: Boolean
+        get() = menuGate.locked
+        set(value) {
+            if (menuGate.menu(value)) {
+                // Cancel held state once, not a synthetic press on the next room.
+                each { s -> s.cancelHeld() }
+            }
+            if (!value) menuGate.deliver(neutral()) // closed by touch while already at rest
+        }
     private val subs = ArrayList<PadInput>()
     private val main = Handler(Looper.getMainLooper())
     var lt = false; private set
@@ -143,24 +161,28 @@ internal object PadHub {
     private var status: Pair<Boolean, String>? = null
 
     private val reader = PadReader(
-        onPad = { a, b, c, d -> lt = a; rt = b; lb = c; rb = d; each { s -> s.pad(a, b, c, d) } },
+        onPad = { a, b, c, d -> feedPad(a, b, c, d) },
         onStatus = { ok, m -> status = ok to m; each { s -> s.status(ok, m) } },
-        onButtons = { h -> buttons = h; each { s -> s.held(h) } },
-        onStick = { v -> stick = v; each { s -> s.stick(v) } },
-        onLeftStick = { v -> leftStick = v; each { s -> s.leftStick(v) } },
-        onStickVector = { st, x, y -> vec[st * 2] = x; vec[st * 2 + 1] = y; each { s -> s.vector(st, x, y) } },
+        onButtons = { h -> feedButtons(h) },
+        onStick = { v -> feedStick(v) },
+        onLeftStick = { v -> feedLeftStick(v) },
+        onStickVector = { st, x, y -> feedVector(st, x, y) },
     )
     private var readerOn = false
 
     /** 1.0.29 key-lag review: every subscriber's delivery timed; a slow one is named in PadSlow's line (room work on the main thread) */
     private inline fun each(f: (PadInput) -> Unit) { for (s in subs.toList()) PadSlow.timed({ s.who }) { f(s) } }
+    private fun neutral() = buttons == 0 && !lt && !rt && !lb && !rb && stick == -1 && leftStick == -1 && vec.all { kotlin.math.abs(it) < 0.2f }
+    private inline fun input(f: (PadInput) -> Unit) {
+        if (menuGate.deliver(neutral())) each(f)
+    }
 
     // THE LAUNCHER'S COPY (PadFeed, the private fork's 3c): the same deliveries the reader makes, when there is no reader (no root)
-    fun feedPad(a: Boolean, b: Boolean, c: Boolean, d: Boolean) { lt = a; rt = b; lb = c; rb = d; each { s -> s.pad(a, b, c, d) } }
-    fun feedButtons(h: Int) { buttons = h; each { s -> s.held(h) } }
-    fun feedStick(v: Int) { stick = v; each { s -> s.stick(v) } }
-    fun feedLeftStick(v: Int) { leftStick = v; each { s -> s.leftStick(v) } }
-    fun feedVector(st: Int, x: Float, y: Float) { vec[st * 2] = x; vec[st * 2 + 1] = y; each { s -> s.vector(st, x, y) } }
+    fun feedPad(a: Boolean, b: Boolean, c: Boolean, d: Boolean) { lt = a; rt = b; lb = c; rb = d; input { s -> s.pad(a, b, c, d) } }
+    fun feedButtons(h: Int) { buttons = h; input { s -> s.held(h) } }
+    fun feedStick(v: Int) { stick = v; input { s -> s.stick(v) } }
+    fun feedLeftStick(v: Int) { leftStick = v; input { s -> s.leftStick(v) } }
+    fun feedVector(st: Int, x: Float, y: Float) { vec[st * 2] = x; vec[st * 2 + 1] = y; input { s -> s.vector(st, x, y) } }
 
     private val stopLater = Runnable { if (subs.isEmpty() && readerOn) { readerOn = false; reader.stop(); status = null } }
 
@@ -171,6 +193,7 @@ internal object PadHub {
         if (RootPolicy.allowed && (!readerOn || !reader.isRunning)) { readerOn = true; restart() }
         // the state right now, so a late starter sees what is already held
         status?.let { p.status(it.first, it.second) }
+        if (inputBlocked) return
         p.pad(lt, rt, lb, rb)
         p.held(buttons)
         p.stick(stick); p.leftStick(leftStick)

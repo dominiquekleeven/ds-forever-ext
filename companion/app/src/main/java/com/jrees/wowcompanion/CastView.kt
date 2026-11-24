@@ -1171,6 +1171,11 @@ class CastView(context: Context, private val onCast: (String) -> Unit) : View(co
             // b-class-radial-stick: Home's class layer is another view: it is told too (it was redrawn only at the open / close)
             // f-class-wheel-sticks (the user 2026-11-16, pick: "Both sticks aim, no walking"): both sticks reach the class wheel
             onStickVector = { st, x, y -> classStick(st, x, y) },
+            onCancel = {
+                padLt = false; padRt = false; padLb = false; padRb = false; held = 0; stickSector = -1
+                classAim.move(0, 0f, 0f); classAim.move(1, 0f, 0f); classAim.open()
+                classLastPointed = -1; classFlow.cancelInput()
+            },
         )
         ready = true
         refreshSettings()
@@ -4879,6 +4884,8 @@ internal object ClassChord {
             if (side != NONE && latched && !pickA(side) && pointed >= 0) end(Act.Pick(pointed)) else Act.None
         /** the app left the screen: shut, no cast */
         fun reset() { side = NONE; latched = false; needFree = false }
+        /** Native menu suspension keeps this wheel, but cannot release-cast it. */
+        fun cancelInput() { latched = side != NONE; lastRaw = NONE; needFree = false }
         private fun end(a: Act): Act { side = NONE; latched = false; needFree = lastRaw != NONE; return a }
     }
 

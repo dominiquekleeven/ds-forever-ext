@@ -8,7 +8,7 @@ import java.io.File
  * SavedVariables only on a clean exit and Android kills it, so nothing the player set (commands - the Spell Radial among them -, the
  * spell radial's slices, X / Y / A's fight spells, the In-combat overlay, the toolbar switches, binds...) ever reached the disk.
  *
- * The add-on (PadMap m51) sends each of OUR saved tables as Lua source (`svkeep`: var, n = settings count, lua) when it changes; the
+ * The add-on sends each of OUR saved tables as Lua source at clean logout/exit or /reload, not while settings change; the
  * app keeps the latest per table in Documents/DS Forever/settings/<var>.json (an uninstall keeps it; the previous one as .bak). BEFORE
  * the game starts (NativeLogin.prepare: the client is not running) it writes OUR OWN file WTF/Account/<account>/SavedVariables/
  * <AddOn>.lua from it - PER ENTRY ([fold], the fix of 2026-11-18): the game file's own value of an entry stays unless the kept one is a
@@ -32,7 +32,11 @@ object SvKeep {
     fun parse(msg: JSONObject, now: Long): Doc? {
         val v = msg.optString("var"); val lua = msg.optString("lua")
         if (v !in FILES || !lua.startsWith("{") || !lua.endsWith("}")) return null
-        return Doc(v, msg.optInt("n", 0), lua, now)
+        val captured = if (msg.has("savedAt")) msg.optLong("savedAt", 0L) else now
+        if (msg.has("savedAt") && captured <= 0L) return null
+        // A logout document can reach Android after the native save completed.
+        // Keep its source capture time so delayed receipt cannot beat that save.
+        return Doc(v, msg.optInt("n", 0), lua, minOf(captured, now))
     }
 
     fun toJson(d: Doc): String = JSONObject().put("v", 1).put("var", d.variable).put("n", d.n).put("lua", d.lua).put("at", d.savedAt).toString()
@@ -81,7 +85,8 @@ object SvKeep {
      * The game's own table [game] (all of it, the add-on's skipped keys too) with the kept copy [kept]'s entries in, PER ENTRY (a table's
      * own keys and, one level down, each character's store, as [SvMerge]). The game file's value stays unless the kept value is a
      * GENUINE newer change of that entry:
-     *  - an entry only the kept copy has comes in; one only the game has stays (nothing is ever dropped; skipped keys stay the game's);
+     *  - an entry only the kept copy has comes in, except an entry a newer native logout removed from the launch base;
+     *    one only the game has stays; skipped keys stay the game's;
      *  - a kept value that is empty, or holds less than half the game's settings, never wins (a lost / reset / thin copy);
      *  - with a [base] (the table the game last started with): the kept value wins only when the kept entry changed since and the
      *    game's did not; both changed: the newer table ([keptAt] vs the game file's time [gameAt]); the kept one unchanged: the game's;
@@ -92,7 +97,12 @@ object SvKeep {
         var fromKept = 0; var added = 0; var refused = 0
         fun unit(g: Any?, k: Any?, b: Any?): Any? {
             if (k == null) return g
-            if (g == null) { added++; return k }
+            if (g == null) {
+                // Native logout removed an entry present at launch. Do not
+                // resurrect it from an older recovery copy (including nil/off).
+                if (b != null && gameAt >= keptAt) return null
+                added++; return k
+            }
             if (SvMerge.same(g, k)) return g
             val gl = SvLua.leaves(g); val kl = SvLua.leaves(k)
             if (gl > 0 && (kl == 0 || (gl >= 4 && kl * 2 < gl))) { refused++; return g }

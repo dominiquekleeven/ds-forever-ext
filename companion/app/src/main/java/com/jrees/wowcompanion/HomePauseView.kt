@@ -155,6 +155,10 @@ class HomePauseView(
                 mag[st.coerceIn(0, 1)] = kotlin.math.hypot(x.toDouble(), y.toDouble())
                 if (live()) vector(st, x.toDouble(), -y.toDouble()) else stickCheck()
             } },
+            onCancel = {
+                held = 0; startHeld = false; seeded = true; lb = false; rb = false
+                aimStick = -1; mag.fill(0.0); flow.cancelInput()
+            },
         ).also { it.start() }
         Log.i(TAG, "pause: open")
         invalidate()

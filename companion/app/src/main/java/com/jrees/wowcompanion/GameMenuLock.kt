@@ -10,7 +10,7 @@ import android.view.View
 /**
  * THE GAME MENU HAS THE PAD (the user's decision 1, 2026-11-11: "If we are in the game menu though ... it should be locked until the game
  * menu closes. That's the only valid example"). The game menu open at a pull keeps the game's own controller for that fight (PadMap m134
- * leaves the router aside); while it still shows (Interact's doc.gmLock) the bottom screen is dimmed and takes no touch, and it is
+ * leaves the router aside); whenever it shows (Interact's doc.gmLock) the bottom screen is dimmed and takes no touch, and it is
  * released the moment the menu closes. Label only (terse page text).
  */
 class GameMenuLock(context: Context) : View(context) {

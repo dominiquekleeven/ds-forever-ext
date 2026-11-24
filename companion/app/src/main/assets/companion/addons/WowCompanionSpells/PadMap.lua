@@ -929,6 +929,7 @@ function OV.fbSnip(fbf)
     return "\n    do\n    local fbf = " .. fbf .. "\n" .. [=[
     local h = self:GetFrameRef("wc-hdr") or self
     local fm = h:GetAttribute("wc-form") or 0
+    if not h:GetAttribute("wc-menu") then
     for i = 1, (h:GetAttribute("wc-fb-n") or 0) do
         local key, pc = h:GetAttribute("wc-fb-k-" .. i), h:GetAttribute("wc-fb-pc-" .. i)
         local r = h:GetFrameRef("wc-fb-r-" .. i)
@@ -969,6 +970,7 @@ function OV.fbSnip(fbf)
                 else h:ClearBinding(key) end
             end
         end
+    end
     end
     end
 ]=]
@@ -1717,8 +1719,45 @@ local ONFIGHT = [=[
     end
 ]=] .. OV.fbSnip('(newstate == "1") and 1 or 0')
 local routerMacrosSoon
+-- Suspend THIS router's bindings at the native menu's show edge, even during
+-- lockdown. Restore only its recorded bindings, then recompute its fight chords.
+-- The shared Interact capture retains its guest/overlay; this is its secure side.
+R.MENU_SHOW = [=[
+    control:SetAttribute("wc-menu", true)
+    control:ClearBindings()
+    for pos = 1, 8 do
+        local b = control:GetFrameRef("wc-face-" .. pos)
+        if b then
+            b:SetAttribute("type", nil)
+            b:SetAttribute("typerelease", nil)
+            b:SetAttribute("wc-kind", nil)
+        end
+    end
+    for i = 1, (control:GetAttribute("wc-fb-n") or 0) do
+        control:SetAttribute("wc-fb-cur-" .. i, nil)
+    end
+]=]
+R.MENU_HIDE = [=[
+    control:SetAttribute("wc-menu", nil)
+    for i = 1, (control:GetAttribute("wc-menu-n") or 0) do
+        local key = control:GetAttribute("wc-menu-k-" .. i)
+        local button = control:GetAttribute("wc-menu-b-" .. i)
+        local action = control:GetAttribute("wc-menu-a-" .. i)
+        if button then control:SetBindingClick(true, key, button, "LeftButton")
+        elseif action then control:SetBinding(true, key, action) end
+    end
+    do local self = control
+]=] .. OV.fbSnip("nil") .. "\nend"
+function R.menuHook(hdr)
+    local menu = _G.GameMenuFrame
+    if R.menuHooked or type(menu) ~= "table" or type(menu.IsShown) ~= "function" or type(menu.HookScript) ~= "function" then return end
+    R.menuHooked = pcall(function()
+        SecureHandlerWrapScript(menu, "OnShow", hdr, R.MENU_SHOW)
+        SecureHandlerWrapScript(menu, "OnHide", hdr, R.MENU_HIDE)
+    end)
+end
 local function routerHeader()
-    if R.hdr then return R.hdr end
+    if R.hdr then R.menuHook(R.hdr); return R.hdr end
     local ok = pcall(function()
         R.hdr = CreateFrame("Frame", "WowCompanionFaceRouter", UIParent, "SecureHandlerStateTemplate")
         R.hdr:SetAttribute("_onstate-wcfight", ONFIGHT)
@@ -1741,6 +1780,7 @@ local function routerHeader()
     end)
     if not ok then R.hdr = nil end
     if R.hdr and routerMacrosSoon then pcall(routerMacrosSoon) end
+    if R.hdr then R.menuHook(R.hdr) end
     return R.hdr
 end
 -- Forever's own bars (GamepadMainActionBarFrame.PageUnit): per anchor its base bar first, then every override bar sharing that anchor
@@ -2303,13 +2343,22 @@ local function routerBind(why, fightStart)
     local before = R.aside
     R.aside = aside
     pcall(ClearOverrideBindings, hdr)
+    local menuBindings = {}
+    local function menuClick(owner, priority, key, button, mouse)
+        SetOverrideBindingClick(owner, priority, key, button, mouse)
+        menuBindings[key] = { button = button }
+    end
+    local function menuAction(owner, priority, key, action)
+        SetOverrideBinding(owner, priority, key, action)
+        menuBindings[key] = { action = action }
+    end
     R.bound = {}
     if not aside then
         for pos, key in pairs(face.keys) do
             local b, choice = face.buttons[pos], faceStore()[pos]
             if pos == 6 and b then b:SetAttribute("wc-tradial", OV.tradialOn() or nil) end                          -- m101
             if b and key and (type(choice) == "table" or (pos == 6 and ((OV.smartOn and OV.smartOn() == true) or OV.tradialOn()))) then      -- m87 / m101
-                pcall(SetOverrideBindingClick, hdr, true, key, b:GetName(), "LeftButton")
+                pcall(menuClick, hdr, true, key, b:GetName(), "LeftButton")
                 R.bound[pos] = TS(function() return GetBindingAction(key, true) end) == routerAct(b:GetName()) or nil
             end
         end
@@ -2317,7 +2366,7 @@ local function routerBind(why, fightStart)
     R.bbound = nil
     R.carry = {}
     local function carry(b, key)
-        pcall(SetOverrideBindingClick, hdr, true, key, b:GetName(), "LeftButton")
+        pcall(menuClick, hdr, true, key, b:GetName(), "LeftButton")
         local ok = TS(function() return GetBindingAction(key, true) end) == routerAct(b:GetName())
         if ok then R.carry[key] = b:GetName() end
         return ok
@@ -2392,7 +2441,7 @@ local function routerBind(why, fightStart)
         local key = startKey()
         R.skey = key
         if menuArmed() then
-            pcall(SetOverrideBinding, hdr, true, key, "TOGGLEGAMEMENU")
+            pcall(menuAction, hdr, true, key, "TOGGLEGAMEMENU")
             R.sbound = TS(function() return GetBindingAction(key, true) end) == "TOGGLEGAMEMENU" and "menu" or nil
         else
             local sb = routerStart()
@@ -2412,8 +2461,8 @@ local function routerBind(why, fightStart)
         for chord, k in pairs(bindPlan()) do
             if not (OV.stk.chord[chord] and OV.stk.before(chord)) then     -- m150: a taken stick stays the game's
                 local cn = OV.stk.chord[chord] and k:match("^CLICK ([%w_]+):LeftButton$")   -- m157: a stick's own button
-                if cn then pcall(SetOverrideBindingClick, hdr, true, chord, cn, "LeftButton")
-                else pcall(SetOverrideBinding, hdr, true, chord, k) end
+                if cn then pcall(menuClick, hdr, true, chord, cn, "LeftButton")
+                else pcall(menuAction, hdr, true, chord, k) end
                 R.cbound[chord] = TS(function() return GetBindingAction(chord, true) end) == k or nil
                 if OV.stk.chord[chord] then OV.stk.read(chord, k) end     -- m150: a stick's both layers (and a refusal: lost)
             end
@@ -2452,6 +2501,14 @@ local function routerBind(why, fightStart)
     end
     -- m77 PARTY MODE: on = all 8 router keys carried; Select to the party toggle (PARTY_BUILD.md 3.5)
     if OV.pm and OV.pm.bind then pcall(OV.pm.bind, aside, fightStart, carry) end
+    local menuN = 0
+    for key, binding in pairs(menuBindings) do
+        menuN = menuN + 1
+        hdr:SetAttribute("wc-menu-k-" .. menuN, key)
+        hdr:SetAttribute("wc-menu-b-" .. menuN, binding.button)
+        hdr:SetAttribute("wc-menu-a-" .. menuN, binding.action)
+    end
+    hdr:SetAttribute("wc-menu-n", menuN)
     -- m132 / m133: at the fight's start (before the lockdown) the fight layer's chords take their fight side, through the same secure
     -- body as in the fight (OV.fbSnip, forced to "a fight": B's give-back starts cleared), after Party mode's keys (it wins there)
     if not aside and (fightStart or fighting()) and (R.fbN or 0) > 0 then
@@ -5274,7 +5331,7 @@ f:SetScript("OnEvent", function(_, e, a1, a2)
                 -- m40: the m16 login probe is retired (it changed a key binding for a moment: SetBinding)
             -- m45: no clean-up list any more (no button): our own old macros go by themselves, a few seconds after the login
             pcall(C_Timer.After, 6, function() pcall(CLEAN.auto, "login") end)
-            pcall(C_Timer.After, 8, function() if WC.svKeep then pcall(WC.svKeep.fix181); pcall(WC.svKeep.send, true) end end)   -- m51
+            pcall(C_Timer.After, 8, function() if WC.svKeep then pcall(WC.svKeep.fix181) end end)   -- repair only; no in-play save preparation
                 -- m18: the read-only key probe, once per PadMap version
                 pcall(C_Timer.After, 7, function() if not inCombat() then pcall(keyProbe) end end)
             end
@@ -6650,15 +6707,14 @@ end
 
 
 -- m51 THE SETTINGS' OWN SAVE FILE, KEPT BY THE APP (the user's pick after test22, "Write the add-on's save file"): this client writes
--- SavedVariables only on a clean exit, and Android kills it, so nothing the player set ever reached the disk. Every 5 s (and at once
--- at login) each of OUR saved tables is written out as Lua source - sorted keys, plain values only - and sent as `svkeep` when it
--- changed; the app keeps it in Documents/DS Forever and writes OUR OWN WowCompanion*.lua before the next game start, only when the
--- game has nothing newer. Left out: what is not a setting (crash-recovery key state, probes, learned cooldowns, chat lines).
+-- SavedVariables on clean exit/logout and /reload. Prepare the app's recovery copy only at PLAYER_LOGOUT too: no recurring table
+-- walk, serialization or forced login/reset save during play. Hub calls the same finalizer before its bye document; our own event
+-- covers a client without Hub's logout hook. Native SavedVariables stay the game's responsibility. A crash/force-kill can lose
+-- changes made since the last clean logout. Left out: non-settings (crash-recovery key state, probes, learned cooldowns, chat lines).
 do
     local SKIP = { WowCompanionSpellsDB = { keyProbe = true, faceSwap = true, faceCd = true, combatFace = true },
                    WowCompanionDB = { chatTop = true } }
     local VARS = { "WowCompanionSpellsDB", "WowCompanionDB" }
-    local last = {}
     local function keyLess(a, b)
         local ta, tb = type(a), type(b)
         if ta ~= tb then return ta < tb end
@@ -6688,13 +6744,15 @@ do
         end
         return "{" .. table.concat(out, ",") .. "}", n
     end
-    local function send(force)
+    local function send()
+        -- Capture time, not Android's later log-receipt time: a delayed recovery
+        -- document must not look newer than the game's subsequent native save.
+        local savedAt = GetServerTime() * 1000
         for _, var in ipairs(VARS) do
             local db = _G[var]
             local src, n = ser(type(db) == "table" and db or {}, 0, SKIP[var])
-            if src and (force or src ~= last[var]) then
-                last[var] = src
-                WC.send(WC.encode({ type = "svkeep", v = PV, var = var, n = n or 0, lua = src }))
+            if src then
+                WC.send(WC.encode({ type = "svkeep", v = PV, var = var, n = n or 0, lua = src, savedAt = savedAt }))
             end
         end
     end
@@ -6726,10 +6784,16 @@ do
         WC.send(WC.encode({ type = "padfix", v = PV, slot = FIX.slot, what = what }))
         if type(WC.flush) == "function" then pcall(WC.flush) else WC.push() end
     end
-    WC.svKeep = { send = send, ser = ser, fix181 = fix181, FIX = FIX }
-    if type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
-        pcall(C_Timer.NewTicker, 5, function() pcall(send, false) end)
+    WC.svKeep = { ser = ser, fix181 = fix181, FIX = FIX }
+    function WC.svKeep.logout()
+        if WC.svKeep.finished then return end
+        send()
+        if type(WC.flush) == "function" then WC.flush() else WC.push() end
+        WC.svKeep.finished = true
     end
+    local saveFrame = CreateFrame("Frame")
+    saveFrame:RegisterEvent("PLAYER_LOGOUT")
+    saveFrame:SetScript("OnEvent", function(_, event) if event == "PLAYER_LOGOUT" then pcall(WC.svKeep.logout) end end)
 end
 
 -- ---------------------------------------------------------------- m175 RESET TO DEFAULTS
@@ -6738,8 +6802,9 @@ end
 -- The app's ask comes as ONE tap on the pause row (Radial pr3: columns 20-27, WC.dsfReset(col)): 20 + code, code 0 settings (the
 -- account-wide Top screen switches kept here), 1 layouts, 2 skills, 3 everything; + 4 = every character (layouts / skills), else the
 -- character playing now only. Out of combat only (a fight: refused, nothing changed). The stores go (nil: each one's own default comes
--- back the next time it is read; the DS WoW toolbar back to its default ON), then our saved tables are sent at once (m51) and the app
--- answers with the game's own Reload (F12): every room reads its stores again and the router is armed from them, the established
+-- back the next time it is read; the DS WoW toolbar back to its default ON), then the app answers with the game's own Reload (F12).
+-- Its normal PLAYER_LOGOUT prepares the latest recovery copy and the game saves its native tables: every room reads its stores again
+-- and the router is armed from them, the established
 -- route. Nothing of the game's own is touched (bars, bindings, macros, CVars: the leave-no-trace rule). Answer: {type = "dsfreset"}.
 do
     local SPELLS = {
@@ -6787,7 +6852,6 @@ do
         if kinds.settings then
             for _, k in ipairs(DBK.settings) do if db[k] ~= nil then db[k] = nil; n = n + 1 end end
         end
-        if WC.svKeep then pcall(WC.svKeep.send, true) end
         return true, nil, n
     end
     function WC.dsfReset(col)

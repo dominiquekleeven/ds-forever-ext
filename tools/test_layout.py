@@ -18,7 +18,7 @@ Proven here:
      strip's TOP-centre, its bottom border 16 under the screen's edge); no "norow" once the row is made (the review);
   d  OPEN / SELECT / A SPOT: the catcher up (TOOLTIP, level 0: under every cell), a tap at a spot puts the selected piece's anchor there
      (the HUD's frame at it after the ease), the document (part) says where, NOTHING saved until Save (WowCompanionDB.lay untouched;
-     SvKeep's svkeep carries no lay), then Save writes it and SvKeep carries it;
+       SvKeep's svkeep carries no lay), then Save changes the native table only until logout;
   e  THE CATCHER: the mapping (1080-line pixels from the cursor), the 60 ms same-spot guard, the pad band and the sink refused, the
      reach switch (a tap REACH lower reaches a spot inside the band; on a smaller screen the reach still clears the band), the selected
      piece kept on the screen;
@@ -328,7 +328,7 @@ check(saved is not None and saved.hud.dx == round(1000 - W / 2) and saved.hud.dy
 check(last(L)["dirty"] is False and last(L)["saves"] == 1, "d. after Save: clean")
 L.execute('tick(5)')
 sv = [x for x in wowstub.docs(L, 0, "svkeep") if x.get("var") == "WowCompanionDB"]
-check(sv and '["lay"]={["%s"]={["hud"]={["dx"]=' % WHO in sv[-1]["lua"], "d. SvKeep carries the saved layout", sv and sv[-1]["lua"][:120])
+check(not sv, "d. Save changes the table without in-play backup serialization", sv and sv[-1]["lua"][:120])
 
 # ================================================================ e. the catcher
 lay.lastAt = -1

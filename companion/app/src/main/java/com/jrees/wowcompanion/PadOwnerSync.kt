@@ -90,12 +90,18 @@ class PadOwnerSync {
         if (!outRoom) { outTries = 0; outLastAt = 0L; outStuckSaid = false }
     }
 
+    /** Same native-menu state, from Spells' immediate show/hide document. */
+    fun noteGameMenu(msg: JSONObject, current: Boolean = true) {
+        if (current && msg.has("gmLock")) gmLock = msg.optBoolean("gmLock")
+    }
+
     /**
      * combat_nav Step 4 (the user, 2026-11-11: "If I am looting ... my dpad should not stop working"): B at a held window's top level in
      * a fight reaches the add-on as PAD2 (never the game's close from our code), which steps `fightBack`; the app answers with ONE LEAVE
      * tap, whose secure click closes the window. The cell to tap once per step, else null.
      */
     fun backAsked(): Pair<String, Int>? {
+        if (gmLock) return null
         if (mode != ROOM || backN <= backSeen) return null
         backSeen = backN
         return leaveCell
@@ -108,6 +114,7 @@ class PadOwnerSync {
      * asks the app to go Home instead (doc.fightHome). The capture id that asked, once per ask, else null; Home's LEAVE ([step]) follows.
      */
     fun homeAsked(): String? {
+        if (gmLock) return null
         if (mode == null || homeN <= homeSeen) return null
         homeSeen = homeN
         return homeWho ?: ""
@@ -121,6 +128,7 @@ class PadOwnerSync {
      * (never an ENTER: the game answers its own pop-up; a room mode already on stays)
      */
     fun step(wantsPad: Boolean, nowMs: Long, deathOnly: Boolean = false): Step {
+        if (gmLock) return Step(Act.NONE)
         val m = mode ?: return outOfAFight(nowMs)
         if (gmLock || gmFight) return Step(Act.NONE)
         // the DEATH pop-up alone never asks for an ENTER (the game shows it to a dead player only, so doc.dead - stale at the death: no
@@ -183,5 +191,24 @@ class PadOwnerSync {
         /** InteractView's own fight-loot reader (fightLootPress) runs only while the game has the pad: in room mode every press already
          *  reaches the add-on's loot cursor through the router, so reading it here too would act on the same press twice */
         fun appReadsLoot(fightNav: Boolean, fightMode: String?): Boolean = fightNav && fightMode != ROOM
+    }
+}
+
+/** Input delivery follows PadOwnerSync.gmLock. A menu's closing press is never a
+ * fresh bottom-screen press: wait for buttons, shoulders and sticks to rest. */
+class NativeMenuInputGate {
+    var locked = false; private set
+    var blocked = false; private set
+    fun menu(locked: Boolean): Boolean {
+        if (this.locked == locked) return false
+        this.locked = locked
+        blocked = true
+        return locked
+    }
+    fun deliver(neutral: Boolean): Boolean {
+        if (locked) return false
+        if (!blocked) return true
+        if (neutral) blocked = false
+        return false
     }
 }

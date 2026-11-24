@@ -45,7 +45,7 @@ object DirectPad {
     /** is [id] getting direct presses now (MainActivity drops its relayed presses while true) */
     fun active(id: String): Boolean {
         val r = regs[id] ?: return false
-        return healthy && id !in stopped && r.active()
+        return healthy && !PadHub.inputBlocked && id !in stopped && r.active()
     }
 
     /** the app leaves [id]'s room by itself (B, the disc, another room): no more direct presses until its next hold ([resume]) */
@@ -76,8 +76,10 @@ object DirectPad {
     /** the keys held now and when each went down (uptime ms; main thread): push to talk finds its bound button by it (HoldTalk.pttSource) */
     private val downAt = HashMap<String, Long>()
     fun heldSince(): Map<String, Long> = HashMap(downAt)
+    fun nativeMenuOpened() { cancelRepeat(); downAt.clear() }
 
     private fun key(k: String, down: Boolean) {
+        if (PadHub.inputBlocked) { if (!down) { downAt.remove(k); stopRepeat(k) }; return }
         if (down) downAt[k] = android.os.SystemClock.uptimeMillis() else downAt.remove(k)
         val r = regs.values.firstOrNull { k in it.keys && active(it.id) } ?: run {
             if (!down) stopRepeat(k)

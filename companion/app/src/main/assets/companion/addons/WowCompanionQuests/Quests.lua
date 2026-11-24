@@ -1819,27 +1819,68 @@ end
 
 local OPS = {}
 
+-- Companion focus is a Questie destination choice, not just a Blizzard POI choice.
+-- Use Questie's own nearest-spawn lookup and SPF's existing TomTom bridge. Keep
+-- the waypoint identity: another TomTom caller or guide must never be cancelled.
+local focusWaypoint, focusQuest
+local function focusNavigation(id)
+    local api = ShortestPathForever and ShortestPathForever.API
+    local db = ShortestPathForeverDB
+    if not (api and type(api.JourneyState) == "function" and db and db.focusedQuest and db.journey and db.tomtom) then return end
+    -- A real TomTom owns its own waypoint queue and its separate follow opt-in.
+    if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("TomTom") then return end
+    local ok, state = pcall(api.JourneyState)
+    if not ok or type(state) ~= "table" or state.blocked then return end
+    local char = Questie and Questie.db and Questie.db.char
+    local mine = focusWaypoint and char and char._tom_waypoint == focusWaypoint
+        and TomTom and type(TomTom.IsValidWaypoint) == "function" and TomTom:IsValidWaypoint(focusWaypoint)
+    if state.owner and state.owner ~= "Shortest Path Forever" and not (state.owner == "TomTom" and mine) then return end
+    if mine and focusQuest == id and state.owner == "TomTom" then return end
+    -- SPF's native focused-quest journey has no API owner, so Cancel(owner)
+    -- cannot clear it. Use its existing unprotected clear-journey binding. This
+    -- also prevents a failed game-POI fallback from leaving the previous goal up.
+    if state.busy and not state.owner then
+        local clear = _G.ShortestPathForeverClearJourneyButton
+        if clear and type(clear.Click) == "function" then pcall(clear.Click, clear) end
+    elseif state.owner == "Shortest Path Forever" then
+        api.Cancel(state.owner)
+    end
+    -- Clear only the last destination this focus path actually installed, including
+    -- when the next quest has no eligible spawn. Never leave A labelled as B.
+    if mine and type(TomTom.RemoveWaypoint) == "function" then TomTom:RemoveWaypoint(focusWaypoint) end
+    focusWaypoint, focusQuest = nil, nil
+    if not id then return end
+    local utils = Questie and Questie.TrackerUtils
+    if not utils and QuestieLoader and type(QuestieLoader.ImportModule) == "function" then
+        local loaded, module = pcall(QuestieLoader.ImportModule, QuestieLoader, "TrackerUtils")
+        if loaded then utils = module end
+    end
+    if not (type(utils) == "table" and type(utils.SetQuestTomTomTarget) == "function") then return end
+    local planned, found = pcall(utils.SetQuestTomTomTarget, id)
+    local uid = char and char._tom_waypoint
+    if planned and found and uid and TomTom and type(TomTom.IsValidWaypoint) == "function" and TomTom:IsValidWaypoint(uid) then
+        focusWaypoint, focusQuest = uid, id
+    end
+end
+
 function OPS.track(id)
     if not id or not inLog(id) then return ack("track", id, false, "not in log") end
-    -- test22 (the user: "Track the checkpoint"): while the ROUTE's pin holds the game's super-track (Map.lua WC.routeWp), the app's
-    -- focus push must not take it back: SetSuperTrackedQuestID fired SUPER_TRACKING_CHANGED, Map read it as "the player chose
-    -- another" and cleared the route's pin, and the app set it again (a fight). The pin now just stands for the new quest
-    -- (the app re-plans the route for it and moves the pin); the quest's own super-track comes back when the route ends.
+    -- The retired app planner's pin must not mask the real focus change from SPF.
     local R = WC.routeWp
-    if R and R.active then
-        R.qid = id
-        if type(WowCompanionDB) == "table" and type(WowCompanionDB.routeWp) == "table" then WowCompanionDB.routeWp.qid = id end
-        -- q48: no SUPER_TRACKING_CHANGED fires for this, so the map document (superTracked) is sent at once too
-        if type(WC.snapshotSoon) == "function" then pcall(WC.snapshotSoon, "supertrack") end
-        return result("track", id, true, nil)
-    end
+    if R and R.active and type(R.clear) == "function" then R.clear(false, "companion focus") end
+    -- Plan first: the synchronous super-track event then sees the TomTom-owned
+    -- Questie journey and SPF does not also plan a second, game-POI destination.
+    focusNavigation(id)
     if type(WC.stTag) == "function" then WC.stTag("the app's focus push") end
     CALL(function() C_SuperTrack.SetSuperTrackedQuestID(id) end)
     local now = superTracked()
+    if WC.spfRoute then WC.spfRoute.checked = -math.huge end
+    if type(WC.snapshotSoon) == "function" then pcall(WC.snapshotSoon, "supertrack") end
     result("track", id, now == id, now ~= id and "did not take" or nil)
 end
 
 function OPS.untrack()
+    focusNavigation(nil)
     if type(WC.stTag) == "function" then WC.stTag("the app's untrack") end
     CALL(function() C_SuperTrack.SetSuperTrackedQuestID(0) end)
     if superTracked() then CALL(function() C_SuperTrack.ClearAllSuperTracked() end) end
@@ -1865,6 +1906,7 @@ end
 function OPS.unfocus(id)
     if not id or not inLog(id) then return ack("untrack", id, false, "not in log") end
     if superTracked() ~= id then return ack("untrack", id, false, "not the focused quest") end
+    focusNavigation(nil)
     if type(WC.stTag) == "function" then WC.stTag("the app's unfocus") end
     CALL(function() C_SuperTrack.SetSuperTrackedQuestID(0) end)
     if superTracked() then CALL(function() C_SuperTrack.ClearAllSuperTracked() end) end

@@ -421,6 +421,8 @@ object RadialModel {
         private var since = 0L
 
         fun reset() { page = 0; pointed = -1; aiming = false; stable = -1; since = 0L; sawNeutral = false; aimArmed = true }
+        /** Yield input without selecting, closing, or changing the current page/selection. */
+        fun cancelInput() { aiming = false; stable = -1; since = 0L; sawNeutral = true; aimArmed = false }
 
         /**
          * A stick's eighth at [now] (ms): pushed = it aims (lights). Back to the middle after aiming = the aimed item is used: the slice

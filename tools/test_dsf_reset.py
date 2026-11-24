@@ -10,7 +10,7 @@ Proves: (0) the versions (m175, r26 / pr3) and the pause row routing 20-27 to WC
 only (another character's and the skills untouched), the toolbar back to ON; (2) Skills: this character's skills only (layouts, other
 characters, the never-reset keys - learned cooldowns, Polestar, one-time marks - untouched); (3) Settings: the account-wide Top screen
 switches only, no character's store; (4) Everything + every character; (5) a fight refuses and changes nothing; (6) the saved tables are
-sent at once (svkeep) after a reset; (7) the add-on's key lists equal the app's ResetPlan (the inventory in one place).
+sent only at the ensuing logout/reload, never during reset; (7) the add-on's key lists equal the app's ResetPlan (the inventory in one place).
 Needs lupa. Exit code 1 on any failure."""
 import json
 import os
@@ -97,7 +97,11 @@ check(val(L, 'WowCompanionDB.lay["%s"].hud.s' % OTHER) == 90 and val(L, 'WowComp
 check(val(L, 'WowCompanionSpellsDB.faceBy["%s"][1]' % ME) == 403 and val(L, 'WowCompanionDB.bagBinds["%s"].zl1' % ME) == 6948,
       '(1) my skills untouched')
 check(val(L, 'WowCompanionDB.compass') is False and val(L, 'WowCompanionDB.pqol["%s"]' % ME) == 7, '(1) settings and Polestar untouched')
-check(any(d.get('type') == 'svkeep' for d in ds), '(6) the saved tables sent at once')
+check(not any(d.get('type') == 'svkeep' for d in ds), '(6) reset does not serialize during play')
+L.execute('fire("PLAYER_LOGOUT")')  # the same lifecycle event as the app's subsequent F12 /reload
+saved = [d for d in docs(L) if d.get('type') == 'svkeep' and d.get('var') == 'WowCompanionDB']
+check(saved and ('["%s"]' % OTHER) in saved[-1]['lua'] and ('["lay"]={["%s"]' % ME) not in saved[-1]['lua'],
+      '(6) reload/logout serializes the latest reset layout, keeping the other character')
 
 # (2) Skills, this character
 L = world()

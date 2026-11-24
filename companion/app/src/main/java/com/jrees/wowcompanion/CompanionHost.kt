@@ -2475,6 +2475,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
 
     /** b98: a press NO registered room takes (DirectPad.unclaimed); the hold to talk's pending press passes its other keys here too */
     private fun padUnclaimed(k: String, down: Boolean) {
+        if (padOwner.gmLock || PadHub.inputBlocked) return
         // hold to talk: D-pad Left on Home where it is the toolbar's Chat (a hold's note keeps the release too)
         if (down && (k == HoldTalk.LEFT_KEY || k == HoldTalk.RIGHT_KEY) && k == talkKey()) talkDown(k)
         if (!down && k == holdTalk.src) talkUp()                            // Left's, or push to talk's own button (hub58)
@@ -2492,6 +2493,15 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
             && interactView.visibility != View.VISIBLE && !dialogView.covers()
             && spellsOverlay.visibility != View.VISIBLE && startView.visibility != View.VISIBLE
             && !homeView.partyHoldsDpad()) barSelect.openEarly(room)       // Party mode's D-pad: no early bar either (2026-11-04)
+    }
+
+    private fun syncGameMenuLock() {
+        if (::gameMenuLock.isInitialized) gameMenuLock.locked = padOwner.gmLock
+        if (padOwner.gmLock && !PadHub.gameMenuLocked) {
+            DirectPad.nativeMenuOpened()
+            talkReset("native game menu")
+        }
+        PadHub.gameMenuLocked = padOwner.gmLock
     }
 
     private fun guestShown(id: String): Boolean = when (id) {
@@ -2850,6 +2860,8 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
         runCatching { DiagLog.doc(msg) }
         // first, for every document: is the game live, and is a text box open over there
         val current = GameInput.note(msg)
+        if (current && padOwner.gmLock && !msg.has("lost") && msg.optString("type") in setOf(
+                "guestpad", "mappad", "cappad", "barcmd", "socialpad", "gfpad", "profpad", "macpad", "calpad", "pnav")) return
         // Never carry a route across login/reload, logout or a loading screen. Replays cannot create live guidance.
         if (current && (msg.optString("type") in listOf("hello", "bye") ||
                 (msg.optString("type") == "load" && msg.optBoolean("on")))) {
@@ -3186,6 +3198,8 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
             "pauseack" -> if (current && ::pauseView.isInitialized) pauseView.onAck(msg)
             // the Game Menu on the bottom screen (Spells r12): the game's list + its countdown, and the cells' answers
             "gamemenu" -> {
+                padOwner.noteGameMenu(msg, current)
+                if (current) syncGameMenuLock()
                 if (current) lastGameMenu = msg
                 // during a clean exit's wait, the game's own countdown goes into the app's log too (General.log starts afresh at the
                 // next launch, so after an install only logcat still has it): each change of it, and its end
@@ -3294,7 +3308,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
                 if (current) {
                     val wasFight = padOwner.mode != null
                     padOwner.note(msg, current)
-                    if (::gameMenuLock.isInitialized) gameMenuLock.locked = padOwner.gmLock
+                    syncGameMenuLock()
                     padOwnerStep()
                     if (!wasFight && padOwner.mode != null) { ui.removeCallbacks(padOwnerTick); ui.postDelayed(padOwnerTick, PAD_OWNER_TICK_MS) }
                 }

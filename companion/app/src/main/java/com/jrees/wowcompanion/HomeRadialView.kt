@@ -292,6 +292,11 @@ class HomeRadialView(
                 mag[st.coerceIn(0, 1)] = kotlin.math.hypot(x.toDouble(), y.toDouble())
                 if (live()) vector(st, x.toDouble(), -y.toDouble()) else stickCheck()
             },
+            onCancel = {
+                held = 0; rawHeld = 0; openKeys = 0; seeded = true
+                lb = false; rb = false; aHeldAt = 0L; aimStick = -1; mag.fill(0.0)
+                flow.cancelInput()
+            },
         ).also { it.start() }
         Log.i(TAG, "radial: open $source (${doc?.items?.size ?: 0} items, ${RadialModel.pages(doc)} page(s))")
         // test24 (the user: "nothing on press"): one WCLOG line per open with everything that decides whether it can be SEEN

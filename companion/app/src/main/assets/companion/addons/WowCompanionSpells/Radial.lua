@@ -630,6 +630,8 @@ catch.n, catch.pass, catch.mode = 0, 0, nil
 -- class wheel aims with either stick (the app reads both), so it keeps both, as the item / spell / pause wheels do: the character does
 -- not walk while a class wheel is open. catch.mode still says "class" (the radialstick doc); `pass` stays 0
 catch:SetScript("OnGamePadStick", function(_, stick, x, y, len)
+    local state = WC.capture and WC.capture.state and WC.capture.state()
+    if state and state.gmLock then return true end
     catch.lastStick = stick
     catch.n = catch.n + 1
     return false
@@ -698,6 +700,8 @@ local function holderNow()
     return ok and type(st) == "table" and st.holder or nil
 end
 stickSync = function()
+    local state = WC.capture and WC.capture.state and WC.capture.state()
+    if state and state.gmLock then catch:Hide(); return end
     if not stickOn then enableSticks() end
     if not hubHooked or not allHooked() then hookHub() end
     local holder = holderNow()
@@ -1358,6 +1362,7 @@ local function gameMenuRow()
     local function doc(why, extra)
         local list, kiosk = items()
         local d = { type = "gamemenu", v = GMV, why = why, mode = SN(function() return C_GameRules.GetActiveGameMode() end),
+                    gmLock = S(function() return GameMenuFrame:IsShown() end) == true,
                     kiosk = kiosk or nil, items = list, cells = COL, binds = bindList(), micro = rectOf(_G.MainMenuMicroButton),
                     fight = (S(function() return InCombatLockdown() end) == true) or nil }
         for k, v in pairs(extra or {}) do d[k] = v end
@@ -1460,8 +1465,10 @@ local function gameMenuRow()
         if hookedShow or type(GameMenuFrame) ~= "table" or type(GameMenuFrame.HookScript) ~= "function" then return end
         hookedShow = pcall(function()
             GameMenuFrame:HookScript("OnShow", function()
+                pcall(doc, "opening")
                 C_Timer.After(0.05, function() pcall(doc, "shown", { targets = targets() }) end)
             end)
+            GameMenuFrame:HookScript("OnHide", function() pcall(doc, "hidden") end)
         end)
     end
     pcall(hookShow)

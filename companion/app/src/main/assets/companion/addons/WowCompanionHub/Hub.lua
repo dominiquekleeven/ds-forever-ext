@@ -1385,6 +1385,9 @@ local byeOk = pcall(function() return byeFrame:RegisterEvent("PLAYER_LOGOUT") en
 if byeOk then
     byeFrame:SetScript("OnEvent", function()
         pcall(function()
+            -- Final settings must arrive while this run is still current. The
+            -- same once-only finalizer also handles PadMap's PLAYER_LOGOUT event.
+            if WC.svKeep and type(WC.svKeep.logout) == "function" then pcall(WC.svKeep.logout) end
             WC.send(WC.encode({ type = "bye", why = "logout", boot = BOOT, v = HV }))
             if type(WC.flush) == "function" then WC.flush() end
         end)

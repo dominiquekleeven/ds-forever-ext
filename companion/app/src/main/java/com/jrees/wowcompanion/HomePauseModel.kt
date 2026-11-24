@@ -178,6 +178,8 @@ object HomePauseModel {
             page = DEFAULT_PAGE; pointed = -1; cancelled = false; heldOption = -1; aiming = false; stable = -1; since = 0L
             sawNeutral = false; aimArmed = true
         }
+        /** The native menu took input, not a release of an aimed slice. */
+        fun cancelInput() { aiming = false; stable = -1; heldOption = -1; cancelled = false; sawNeutral = true; aimArmed = false }
 
         /** pk1: a Polestar step is shown and can be skipped (else both Polestar slices are hidden); a skip is left to undo (else
          *  Previous is greyed) - set by the view at each open from the Map's state */

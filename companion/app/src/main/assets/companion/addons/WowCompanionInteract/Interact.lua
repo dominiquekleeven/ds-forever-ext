@@ -2653,7 +2653,7 @@ local function buildDoc()
     doc.dead = TB(function() return UnitIsDeadOrGhost("player") end) or nil
     -- i144 (the user's decision 1, 2026-11-11: the game menu "should be locked until the game menu closes"): the game menu was open at
     -- the pull, so the game has the pad for this fight (PadMap m134) - the bottom screen is locked while the menu still shows
-    if N.fightMenu and doc.combat and TB(function() return _G.GameMenuFrame:IsShown() end) == true then doc.gmLock = true end
+    if TB(function() return _G.GameMenuFrame:IsShown() end) == true then doc.gmLock = true end
     if doc.holder == "npc" then
         doc.heal = HEAL.col             -- the app's self-heal cell, only while an "npc" hold exists
         if not doc.pad then doc.pad = padNow end   -- with no window in the document the app still needs the pad to tap it
@@ -6529,6 +6529,10 @@ selSink:SetScript("OnClick", function(_, key, down)
 end)
 local SEL_BIND = "CLICK WowCompanionInteractSel:PADBACK"
 function N.selSync()
+    if N.gmLock then
+        if not inCombat() then pcall(ClearOverrideBindings, selOwner); N.bar.bound = false end
+        return
+    end
     if inCombat() then return end                   -- frozen; PLAYER_REGEN_DISABLED already let go
     local unfocused = 0
     if type(WC.dialogs) == "table" and type(WC.dialogs.unfocused) == "function" then
@@ -7035,6 +7039,7 @@ function N.queue(id, spec)
 end
 -- at every document: nobody holds any more -> the waiter takes (out of a fight at once; in a fight it becomes a pending ENTER)
 function N.grantWait()
+    if N.gmLock then return end
     local w = N.wait
     if not w or G.holder or N.holding or N.pend then return end
     N.wait = nil
@@ -7211,6 +7216,7 @@ end
 --   spec.pass = { "PAD2", ... }     these keys go to the game untouched
 -- wantOf(k): what key k is bound to while we hold: our sink, the guest's button, or nil = not ours.
 local function wantOf(k)
+    if N.gmLock then return nil end
     local sp = G.holder and G.spec
     if sp then
         if sp.pass and sp.pass[k] then return nil end
@@ -7249,6 +7255,7 @@ local function keeps(k)
 end
 
 function N.hold()
+    if N.gmLock then return end
     if N.holding or inCombat() then return end
     local any = false
     for _, k in ipairs(PAD_KEYS) do
@@ -7269,7 +7276,7 @@ end
 -- while an NPC WINDOW holds (the right stick scrolls its tooltips; see onStick), never while a room holds as guest.
 N.stickOn = false
 function N.stickSync(npcOpen)
-    local want = (N.holding and not G.holder and npcOpen) and true or false
+    local want = (not N.gmLock and N.holding and not G.holder and npcOpen) and true or false
     if want == N.stickOn then return end
     N.stickOn = want
     pcall(function() padGrab:EnableGamePadStick(want) end)
@@ -7280,6 +7287,7 @@ end
 -- pieces of code can never pass a key back and forth without end.
 local REASSERT_MAX = 40
 function N.check()
+    if N.gmLock then return end
     if not N.holding or inCombat() then return end
     local keys = {}
     for _, k in ipairs(PAD_KEYS) do keys[#keys + 1] = k end
@@ -7305,6 +7313,7 @@ end
 -- in PROVEN in this session, the keys are taken and the window dimmed inside the event. Until the
 -- document has built the highlight for THIS window, presses are swallowed (N.stale).
 function N.early(slot)
+    if N.gmLock then return end
     if WINDOWS[slot] == false then N.hideNote(slot, "early") return end      -- not switched on yet: the game keeps its window
     if slot == "loot" and LOOT.top() then return end   -- r-loot-on-top: the game keeps its loot window
     if slot == "loot" and N.lootPass() then return end -- i161: an auto loot the holder keeps the pad through
@@ -7465,6 +7474,7 @@ function N.fightLoot(doc)
     return type(doc) == "table" and doc.loot ~= nil and inCombat()
 end
 function N.sync(open, doc)
+    if N.gmLock then return end
     N.stale = false
     -- f-inbox-send, THE USER'S PICK (1.0.8, "Confirm on the top"): money or items to someone not a friend or guildmate stop at the
     -- game's own secure dialog on the top screen, which no add-on may answer. Meanwhile the controller (and the game's own mail
@@ -8252,6 +8262,11 @@ end
 local lastDirect = {}       -- key .. phase -> when the frame delivered it
 
 local function padPress(key, down, via)
+    if N.gmLock then return end
+    if N.menuUps and N.menuUps[key] then
+        if not down then return end
+        N.menuUps[key] = nil
+    end
     if not N.holding then return end
     -- review of i161: the binding route's copy of the release that closed a loot window over a room (the frame's is in direct)
     if via ~= "frame" and N.resumeEaten(key, down) then return end
@@ -8471,6 +8486,8 @@ N.passDown = {}             -- capture v15/16: keys of the eight whose press wen
 -- unless a guest is waiting for a chord: then the next one is the chord, and the game does not get it.
 local function direct(down)
     return function(self, button)
+        if N.gmLock then pcall(self.SetPropagateKeyboardInput, self, true); return end
+        if not down and N.menuUps and N.menuUps[button] then pcall(self.SetPropagateKeyboardInput, self, true); return end
         if N.fight then
             -- CAPTURE v8, a room holding through a fight: every button stops here (pass-on was set OFF before the lockdown;
             -- SetPropagateKeyboardInput is BLOCKED in a fight, measured). The room's keys go to the room; B that the room
@@ -8590,6 +8607,11 @@ function N.trd.stick(stick, x, y)
     return false
 end
 local function onStick(_, stick, x, y)
+    if N.gmLock then return true end
+    if N.menuStickWait then
+        if math.abs(x or 0) < 0.2 and math.abs(y or 0) < 0.2 then N.menuStickWait = nil end
+        return true
+    end
     if not N.holding or G.holder then return true end
     if type(stick) == "string" and isOpen("trade") then return N.trd.stick(stick, x, y) end
     if type(stick) ~= "string" or not (stick:find("Right") or stick:find("Camera") or stick:find("Look")) then return true end
@@ -8607,6 +8629,60 @@ local function onStick(_, stick, x, y)
     return false
 end
 pcall(function() padGrab:SetScript("OnGamePadStick", onStick) end)
+
+-- The native menu suspends the existing capture; it does not replace its guest
+-- or its overlay stack. In fights PadMap's secure menu hooks yield its bindings.
+function N.gameMenuSync()
+    local locked = TB(function() return _G.GameMenuFrame:IsShown() end) == true
+    if locked == (N.gmLock == true) then return end
+    N.gmLock = locked
+    if locked then
+        N.menuUps, N.menuStickWait = {}, true
+        for _, k in ipairs(PAD_KEYS) do N.menuUps[k] = true end
+        for _, k in ipairs(extraKeys()) do N.menuUps[k] = true end
+        for k in pairs(N.npcExtra) do N.menuUps[k] = true end
+    end
+    N.stickDir, G.chord, G.eat = nil, nil, nil
+    N.hold10, N.trd.lDir = nil, nil
+    N.passDown, lastDirect = {}, {}
+    if not inCombat() then
+        if locked then
+            pcall(ClearOverrideBindings, padOwner)
+            pcall(ClearOverrideBindings, selOwner)
+            N.bar.bound = false
+            pcall(function()
+                padGrab:EnableGamePadButton(false)
+                padGrab:EnableGamePadStick(false)
+                padGrab:SetPropagateKeyboardInput(true)
+                padGrab:Hide()
+            end)
+            N.stickOn = false
+        elseif N.holding and not N.fight then
+            for _, k in ipairs(PAD_KEYS) do padBind(k) end
+            for _, k in ipairs(extraKeys()) do padBind(k) end
+            for k in pairs(N.npcExtra) do padBind(k) end
+            pcall(function() padGrab:Show(); padGrab:EnableGamePadButton(true) end)
+        end
+        N.selSync()
+    end
+    if N.capCheck then N.capCheck() end
+    emitSoon()
+end
+function N.gameMenuHook()
+    if N.gmHooked or type(_G.GameMenuFrame) ~= "table" or type(_G.GameMenuFrame.HookScript) ~= "function" then return end
+    N.gmHooked = pcall(function()
+        _G.GameMenuFrame:HookScript("OnShow", N.gameMenuSync)
+        _G.GameMenuFrame:HookScript("OnHide", N.gameMenuSync)
+    end)
+    N.gameMenuSync()
+end
+do
+    local menuEvents = CreateFrame("Frame")
+    menuEvents:RegisterEvent("ADDON_LOADED")
+    menuEvents:RegisterEvent("PLAYER_LOGIN")
+    menuEvents:SetScript("OnEvent", function() N.gameMenuHook() end)
+    N.gameMenuHook()
+end
 
 -- /wci mode on|off   for the harness and the PC client; on the Thor the hub's layout tap does it
 function ACT.mode(a)
@@ -8631,13 +8707,6 @@ do
             local menu = TB(function() return _G.GameMenuFrame:IsShown() end) == true
             local armed = ra and not menu and not (G.spec and G.spec.noFight) and (G.holder ~= nil or N.mode)
             N.fightMenu = menu or nil
-            if menu and not N.gmHooked then
-                -- the menu's own show / hide sends a document (insecure post-hooks on an unprotected window: nothing of the game's runs as ours)
-                N.gmHooked = pcall(function()
-                    _G.GameMenuFrame:HookScript("OnHide", function() emitSoon() end)
-                    _G.GameMenuFrame:HookScript("OnShow", function() emitSoon() end)
-                end)
-            end
             if armed and N.holding and N.fightArm() then         -- a room OR an NPC window (item 10)
                 -- CAPTURE v8 (user, 2026-10-01: "I don't want the game to take the controller at all, I want the room that
                 -- I am in to flash red, and then going back home by what ever means, engages the combat transition"):
@@ -8702,7 +8771,7 @@ do
                     G.holder, G.spec, G.chord, G.eat, G.bnext = nil, nil, nil, nil, nil
                     N.release("closed", "app")
                 end
-                if N.holding then
+                if N.holding and not N.gmLock then
                     for _, k in ipairs(PAD_KEYS) do padBind(k) end
                     for _, k in ipairs(extraKeys()) do padBind(k) end
                     pcall(function() padGrab:Show(); padGrab:EnableGamePadButton(true) end)
@@ -8817,7 +8886,7 @@ end
 -- v13: the holder-change listeners (WC.capture.onChange)
 N.capListeners = {}
 function N.capCheck()
-    local k = tostring(G.holder or (N.holding and "npc") or "") .. "|" .. tostring(N.fight or "")
+    local k = tostring(G.holder or (N.holding and "npc") or "") .. "|" .. tostring(N.fight or "") .. "|" .. tostring(N.gmLock)
     if k == N.capKey then return end
     N.capKey = k
     for _, fn in ipairs(N.capListeners) do pcall(fn) end
@@ -8840,6 +8909,7 @@ WC.capture = {
     take = function(id, spec)
         if type(id) ~= "string" or id == "" or id == "npc" then return false, "bad id" end
         if type(spec) ~= "table" or type(spec.press) ~= "function" then return false, "bad spec" end
+        if N.gmLock then return N.queue(id, spec) end
         -- version 2: `back` must name a button that exists; `pass` must name keys of the eight
         local back, pass = spec.back, nil
         if back ~= nil and (type(back) ~= "string" or type(_G[back]) ~= "table") then return false, "bad spec" end
@@ -9104,7 +9174,7 @@ WC.capture = {
         return true
     end,
     state = function()
-        return { holder = G.holder or (N.holding and "npc") or nil, proven = N.frameSeen or false,
+        return { holder = G.holder or (N.holding and "npc") or nil, proven = N.frameSeen or false, gmLock = N.gmLock or false,
                  combat = (N.fight and G.holder) and true or nil, fightN = (N.fight and G.holder) and (N.fightNo or 0) or nil,
                  trusted = N.trusted or false, bad = N.distrust,
                  under = G.under and G.under.holder or nil }       -- v20: the room suspended under an overlay
