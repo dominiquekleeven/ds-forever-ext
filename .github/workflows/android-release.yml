@@ -14,13 +14,13 @@ permissions:
   contents: read
 
 jobs:
-  launcher_tests:
+  tests:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Check parallel release gates
-        run: python3 -m unittest tools.test_ci_workflow tools.test_ci_cache
+        run: python3 tools/test_ci_workflow.py
       - name: Check bundled addon manifest before building
         run: python3 -c 'from pathlib import Path; from tools.build_release import verify_addon_manifest; verify_addon_manifest(Path("companion"))'
       - uses: actions/setup-java@v4
@@ -33,16 +33,6 @@ jobs:
           python-version: '3.13.3'
       - name: Install pinned Android toolchain
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.1.0" "ndk;27.2.12479018" "cmake;3.22.1"'
-      # Downloads only: bootstrap verifies hashes on hits and rebuilds all native outputs.
-      - uses: actions/cache@v4
-        with:
-          path: |
-            .bootstrap/component-downloads/proton-11.0-90624-arm64ec.wcp
-            .bootstrap/component-downloads/dxvk-2.4.1-wow-aarch64-test.wcp
-            .bootstrap/component-downloads/turnip-wow-scheduler-test.zip
-            .bootstrap/component-downloads/turnip-V32-RP6sched.zip
-            .bootstrap/bridge-toolchain/llvm-mingw-20261104-ucrt-ubuntu-22.04-x86_64.tar.xz
-          key: prereq-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/ci_bootstrap.sh', 'tools/fetch_components.sh', 'tools/components.sha256', 'tools/wow-session-bridge/build_dsf.sh', 'tools/wow-session-bridge/build.sh', 'tools/wow-session-bridge/wow-session-bridge.sha256') }}
       - name: Build pinned runtime prerequisites
         run: bash tools/ci_bootstrap.sh
       - name: Test drivers and independent FPS measurements
@@ -63,39 +53,8 @@ jobs:
             --tests '*GameSessionServiceTest' --tests '*WowLaunchSwitchTest' --tests '*FirstRunArtTest' \
             --tests '*CrashStateLineTest' --tests '*WowCdnStreamTest' --tests '*HomeMapControlsShotsTest' \
             --tests '*FrameGen*Test' --tests '*FrameLimitTest'
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: launcher-menu-ui-screenshots
-          path: ${{ runner.temp }}/ds-ext-menu-shots/
-          if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: launcher-test-reports
-          path: |
-            app/build/test-results/
-            app/build/reports/tests/
-          if-no-files-found: ignore
-  companion_tests:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check bundled addon manifest before testing
-        run: python3 -c 'from pathlib import Path; from tools.build_release import verify_addon_manifest; verify_addon_manifest(Path("companion"))'
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13.3'
-      # The companion library's JVM tests do not need native or launcher runtime assets.
-      - name: Install pinned Android JVM test toolchain
-        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.1.0"'
       - name: Test Questie replacement and Ext update channel
+        if: ${{ !cancelled() }}
         env:
           QUESTIE_BUNDLE_ZIP: ${{ runner.temp }}/questie-bundle.zip
           QUESTIEDB_FOREVER_ZIP: ${{ runner.temp }}/questiedb-forever.zip
@@ -125,35 +84,12 @@ jobs:
             --tests '*Light8Test' --tests '*Light8UnchangedTest' --tests '*FirstRunFolderTest' \
             --tests '*CdnHttpsTest' --tests '*InstallFixesTest' --tests '*MapHoldClaimTest' \
             --tests '*ResetPlanTest' --tests '*ResetFlowTest'
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: companion-test-reports
-          path: |
-            dsforever/build/test-results/
-            dsforever/build/reports/tests/
-          if-no-files-found: ignore
-  lua:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check bundled addon manifest before testing
-        run: python3 -c 'from pathlib import Path; from tools.build_release import verify_addon_manifest; verify_addon_manifest(Path("companion"))'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13.3'
       - name: Test bundled Lua and add-on manifest
+        if: ${{ !cancelled() }}
         env:
           QUESTIE_BUNDLE_ZIP: ${{ runner.temp }}/questie-bundle.zip
           SHORTEST_PATH_FOREVER_ZIP: ${{ runner.temp }}/shortest-path-forever.zip
         run: |
-          curl --fail --location --retry 3 --output "$QUESTIE_BUNDLE_ZIP" \
-            'https://github.com/Questie/Questie/releases/download/bundle%2Fv12.12.0%2Bv1.1.4/Questie-v12.12.0%2Bv1.1.4.zip'
-          echo "116eadd5833836d1b8ff30c9c8b5aaf724bc2de75eea362d6eee3d9962506b5f  $QUESTIE_BUNDLE_ZIP" | sha256sum --check
-          curl --fail --location --retry 3 --output "$SHORTEST_PATH_FOREVER_ZIP" \
-            'https://github.com/cjber/shortest-path-forever/releases/download/v1.45.3/ShortestPathForever-v1.45.3-forever.zip'
-          echo "09a54bb8ed17d4cff74211321202b4c66de180a7e9e53f5713a7ec52ff993ef9  $SHORTEST_PATH_FOREVER_ZIP" | sha256sum --check
           python3 -m venv "$RUNNER_TEMP/lua-tests"
           "$RUNNER_TEMP/lua-tests/bin/pip" install 'lupa==2.6'
           "$RUNNER_TEMP/lua-tests/bin/python" companion/tools/test_questie_replacement.py
@@ -168,6 +104,22 @@ jobs:
           for test in test_controller_situations test_chooser_grid test_realm_key test_roombar_mirror test_combat_top_flag test_pad_order test_map_stale_pend test_aura_container; do
             "$RUNNER_TEMP/lua-tests/bin/python" -B "tools/$test.py"
           done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: menu-ui-screenshots
+          path: ${{ runner.temp }}/ds-ext-menu-shots/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            app/build/test-results/
+            app/build/reports/tests/
+            dsforever/build/test-results/
+            dsforever/build/reports/tests/
+          if-no-files-found: ignore
   # Build a signed candidate in parallel; publication still requires every test gate.
   build:
     runs-on: ubuntu-24.04
@@ -186,15 +138,6 @@ jobs:
           python-version: '3.13.3'
       - name: Install pinned Android toolchain
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.1.0" "ndk;27.2.12479018" "cmake;3.22.1"'
-      - uses: actions/cache@v4
-        with:
-          path: |
-            .bootstrap/component-downloads/proton-11.0-90624-arm64ec.wcp
-            .bootstrap/component-downloads/dxvk-2.4.1-wow-aarch64-test.wcp
-            .bootstrap/component-downloads/turnip-wow-scheduler-test.zip
-            .bootstrap/component-downloads/turnip-V32-RP6sched.zip
-            .bootstrap/bridge-toolchain/llvm-mingw-20261104-ucrt-ubuntu-22.04-x86_64.tar.xz
-          key: prereq-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/ci_bootstrap.sh', 'tools/fetch_components.sh', 'tools/components.sha256', 'tools/wow-session-bridge/build_dsf.sh', 'tools/wow-session-bridge/build.sh', 'tools/wow-session-bridge/wow-session-bridge.sha256') }}
       - name: Build pinned runtime prerequisites
         run: bash tools/ci_bootstrap.sh
       - name: Restore fork signing identity
@@ -228,7 +171,7 @@ jobs:
         run: rm -f "$RUNNER_TEMP/ext-release.p12"
   release:
     if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish)
-    needs: [launcher_tests, companion_tests, lua, build]
+    needs: [tests, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

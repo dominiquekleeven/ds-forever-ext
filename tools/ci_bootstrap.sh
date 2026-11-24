@@ -16,12 +16,7 @@ dependency() {
     test "$(git -C ".deps/$name" rev-parse HEAD)" = "$revision"
     test -z "$(git -C ".deps/$name" status --porcelain)"
 }
-# Cache only original downloads, never the subsequently trimmed runtime.
-mkdir -p .bootstrap/component-downloads
-bash tools/fetch_components.sh "$PWD/.bootstrap/component-downloads"
-for component in proton-11.0-90624-arm64ec.wcp dxvk-2.4.1-wow-aarch64-test.wcp turnip-wow-scheduler-test.zip turnip-V32-RP6sched.zip; do
-    cp "app/src/main/assets/bundled_components/$component" ".bootstrap/component-downloads/$component"
-done
+bash tools/fetch_components.sh
 # Match upstream's deterministic runtime recipe; release packaging checks the trimmed hash.
 python3 -m venv .bootstrap/runtime-python
 .bootstrap/runtime-python/bin/pip install 'zstandard==0.25.0'
@@ -39,8 +34,7 @@ dependency recastnavigation https://github.com/recastnavigation/recastnavigation
 bash companion/tools/harvest/build_native.sh "$PWD/.deps/CascLib"
 bash companion/tools/interiors_native/build_android.sh "$PWD/.deps/recastnavigation" "$PWD/.bootstrap/interiors-android"
 bash companion/tools/whisper_native/build_android.sh "$PWD/.bootstrap/whisper-android"
-# Only the archive is cached; extraction and its pinned hash check run on every CI job.
-bash tools/wow-session-bridge/build_dsf.sh "$PWD/.bootstrap/bridge-toolchain"
+bash tools/wow-session-bridge/build_dsf.sh
 
 # The streaming source is already committed. Copy only its ignored static dependencies.
 dependency moonlight-android https://github.com/moonlight-stream/moonlight-android.git b48494cb96bff23d8886c4775cc4f39a1075495d
