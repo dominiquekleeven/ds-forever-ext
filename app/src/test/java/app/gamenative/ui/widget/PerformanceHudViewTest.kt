@@ -2,6 +2,7 @@ package app.gamenative.ui.widget
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -94,7 +95,11 @@ class PerformanceHudViewTest {
         layout(hud, 320, 1920)
         assertTrue(cells(hud).map { it.top }.distinct().size > 1)
         assertInside(hud)
-        assertTrue(cells(hud).all { text(it).textSize >= 26f })
+        // Android 14 applies nonlinear font scaling; retain the actual 13sp LARGE size.
+        val expectedTextPx = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_SP, 13f, hud.resources.displayMetrics,
+        )
+        cells(hud).forEach { assertEquals(expectedTextPx, text(it).textSize, 0.01f) }
         // A rotation gives the same cells more width; it does not reset their settings.
         layout(hud, 1920)
         assertInside(hud)
