@@ -16,14 +16,13 @@ class NavigationStartupTest {
     private lateinit var tmp: File
     private val all = ThirdPartyAddons.ALL
     private val running = DependencyAddons.gameRunning
-    private val a = ThirdPartyAddons.SHORTEST_PATH
+    private val a = ThirdPartyAddons.TOMTOM
     private val choices = hashMapOf<String, Boolean>()
     private val game get() = File(tmp, "game")
     private val addons get() = File(game, "Interface/AddOns")
-    private val addon get() = File(addons, "ShortestPathForever")
+    private val addon get() = File(addons, "TomTom")
     private val privateDir get() = File(tmp, "private")
-    private val archive get() = File(System.getenv("SHORTEST_PATH_FOREVER_ZIP") ?:
-        "/tmp/opencode/ds-ext-navigation/ShortestPathForever-v1.45.3-forever.zip")
+    private val archive get() = File(System.getenv("TOMTOM_ZIP") ?: "/tmp/opencode/TomTom-v4.4.1-release.zip")
 
     private fun start() = ThirdPartyAddons.start(object : ThirdPartyAddons.Store {
         override fun get(k: String, d: Boolean) = choices[k] ?: d
@@ -47,23 +46,23 @@ class NavigationStartupTest {
 
     private fun record() {
         privateDir.mkdirs()
-        File(privateDir, "state.json").writeText(JSONObject().put("shortestpath/core", JSONObject()
+        File(privateDir, "state.json").writeText(JSONObject().put("tomtom/core", JSONObject()
             .put("in", a.core.tag).put("folders", JSONArray(a.core.folders))).toString())
         start()
     }
 
     private fun syntheticInstall() {
-        File(addon, "ShortestPathForever.toc").apply {
+        File(addon, "TomTom.toc").apply {
             parentFile.mkdirs()
-            writeText("## Interface: 16001\n## Version: 1.45.3\n## X-Forever-Core: v1.17.1\nLibs/ForeverCore/Core.lua\n")
+            writeText("## Interface: 120100, 16001\n## Version: v4.4.1-release\ncore/waypoints.lua\n")
         }
-        File(addon, "Libs/ForeverCore/Core.lua").apply { parentFile.mkdirs(); writeText("-- test core") }
+        File(addon, "core/waypoints.lua").apply { parentFile.mkdirs(); writeText("-- test core") }
         record()
     }
 
     private fun cacheArchive() {
         File(privateDir, "dl/${a.core.asset}").apply { parentFile.mkdirs(); archive.copyTo(this, overwrite = true) }
-        File(privateDir, "state.json").writeText(JSONObject().put("shortestpath/core", JSONObject().put("zip", a.core.tag)).toString())
+        File(privateDir, "state.json").writeText(JSONObject().put("tomtom/core", JSONObject().put("zip", a.core.tag)).toString())
         start()
     }
 
@@ -80,7 +79,7 @@ class NavigationStartupTest {
     @Test fun eachStartupEnablesOnlyWantedNavigationAndUninstallPreservesSharedFiles() {
         syntheticInstall()
         val txt = File(game, "WTF/Account/FAKE/AddOns.txt").apply { parentFile.mkdirs() }
-        val before = "ShortestPathForever: disabled\r\nQuestie: disabled\r\nQuestieDB: disabled\r\nOther: disabled\r\n"
+        val before = "TomTom: disabled\r\nQuestie: disabled\r\nQuestieDB: disabled\r\nOther: disabled\r\n"
         txt.writeText(before)
         val keep = listOf("Questie/user.txt", "QuestieDB/user.txt", "Other/user.txt").map { n ->
             File(addons, n).apply { parentFile.mkdirs(); writeText(n) }
@@ -88,8 +87,8 @@ class NavigationStartupTest {
             parentFile.mkdirs(); writeText("keep player settings")
         }
         val line = ThirdPartyAddons.applyAtStart(game, fetchSmall = false)
-        assertTrue(line, line.contains("Shortest Path Forever dependencies installed and enabled"))
-        assertEquals(before.replace("ShortestPathForever: disabled", "ShortestPathForever: enabled"), txt.readText())
+        assertTrue(line, line.contains("TomTom dependencies installed and enabled"))
+        assertEquals(before.replace("TomTom: disabled", "TomTom: enabled"), txt.readText())
         assertEquals(before, txt.parentFile.listFiles()!!.single { it.name.startsWith("AddOns.txt.dsf-before-") }.readText())
         assertEquals(ThirdPartyAddons.Kind.INSTALLED, ThirdPartyAddons.status(a, "core").kind)
         val expected = keep.associateWith { it.readText() }
@@ -97,23 +96,23 @@ class NavigationStartupTest {
         start()
         ThirdPartyAddons.applyAtStart(game, fetchSmall = false)
         assertFalse(addon.exists())
-        assertTrue(File(game, "Interface/${DependencyAddons.BACKUP}").listFiles()!!.any { it.name.startsWith("ShortestPathForever-") })
+        assertTrue(File(game, "Interface/${DependencyAddons.BACKUP}").listFiles()!!.any { it.name.startsWith("TomTom-") })
         for ((file, text) in expected) assertEquals(file.path, text, file.readText())
         assertFalse(ThirdPartyAddons.coreWanted(a))
     }
 
-    @Test fun missingForeverTocFolderOrEmbeddedCoreCannotReportReady() {
+    @Test fun missingForeverTocFolderOrLoadFileCannotReportReady() {
         syntheticInstall()
-        File(addon, "Libs/ForeverCore/Core.lua").delete()
-        assertNotNull(ThirdPartyAddons.shortestPathProblem(addon))
+        File(addon, "core/waypoints.lua").delete()
+        assertNotNull(ThirdPartyAddons.tomTomProblem(addon))
         var line = ThirdPartyAddons.applyAtStart(game, fetchSmall = false)
-        assertTrue(line, line.contains("Shortest Path Forever not ready"))
+        assertTrue(line, line.contains("TomTom not ready"))
         assertFalse(ThirdPartyAddons.coreInstalled(a))
         syntheticInstall()
-        File(addon, "ShortestPathForever.toc").renameTo(File(addon, "ShortestPathForever_Vanilla.toc"))
+        File(addon, "TomTom.toc").renameTo(File(addon, "TomTom_Vanilla.toc"))
         ThirdPartyAddons.repairMissing(game)
         assertFalse(ThirdPartyAddons.coreInstalled(a))
-        assertTrue(File(addon, "ShortestPathForever_Vanilla.toc").isFile)
+        assertTrue(File(addon, "TomTom_Vanilla.toc").isFile)
         syntheticInstall()
         addon.deleteRecursively()
         line = ThirdPartyAddons.applyAtStart(game, fetchSmall = false)
@@ -122,32 +121,55 @@ class NavigationStartupTest {
     }
 
     @Test fun actualPinnedArchiveInstallsAndRepairsWithoutTouchingUnknownFiles() {
-        assumeTrue("provide SHORTEST_PATH_FOREVER_ZIP", archive.isFile)
+        assumeTrue("provide TOMTOM_ZIP", archive.isFile)
         assertEquals(a.core.bytes, archive.length())
         assertEquals(a.core.sha256, DependencyAddons.sha256(archive))
         ZipFile(archive).use { z ->
-            assertEquals(setOf("ShortestPathForever"), z.entries().asSequence().map { it.name.substringBefore('/') }.toSet())
-            assertEquals(31_636_417L, z.entries().asSequence().sumOf { it.size })
+            assertEquals(setOf("TomTom"), z.entries().asSequence().map { it.name.substringBefore('/') }.toSet())
         }
         val keep = File(addons, "Other/user.txt").apply { parentFile.mkdirs(); writeText("unknown addon") }
         cacheArchive()
         var line = ThirdPartyAddons.applyAtStart(game, fetchSmall = false)
-        assertTrue(line, line.contains("Shortest Path Forever 1.45.3 installed"))
+        assertTrue(line, line.contains("TomTom v4.4.1-release installed"))
         assertTrue(line, line.contains("dependencies installed and enabled"))
-        assertNull(ThirdPartyAddons.shortestPathProblem(addon))
+        assertNull(ThirdPartyAddons.tomTomProblem(addon))
         assertEquals(a.core.folders, ThirdPartyAddons.folders(a, "core"))
-        assertTrue(File(addon, "LICENSE").isFile)
-        assertTrue(File(addon, "Libs/ForeverCore/LICENSE").isFile)
-        File(addon, "ShortestPathForever.toc").delete()
+        assertTrue(File(addon, "Images/Modern/LICENSE.txt").isFile)
+        assertTrue(File(addon, "README.md").isFile)
+        File(addon, "TomTom.toc").delete()
         File(addon, "user-marker.txt").writeText("preserve old copy")
         ThirdPartyAddons.repairMissing(game)
         assertFalse(ThirdPartyAddons.coreInstalled(a))
         cacheArchive()
         line = ThirdPartyAddons.applyAtStart(game, fetchSmall = false)
         assertTrue(line, line.contains("dependencies installed and enabled"))
-        assertNull(ThirdPartyAddons.shortestPathProblem(addon))
-        val backup = File(game, "Interface/${DependencyAddons.BACKUP}").listFiles()!!.single { it.name.startsWith("ShortestPathForever-") }
+        assertNull(ThirdPartyAddons.tomTomProblem(addon))
+        val backup = File(game, "Interface/${DependencyAddons.BACKUP}").listFiles()!!.single { it.name.startsWith("TomTom-") }
         assertEquals("preserve old copy", File(backup, "user-marker.txt").readText())
         assertEquals("unknown addon", keep.readText())
+    }
+
+    @Test fun upgradeRetiresOnlyRecordedSpfWithProtectedMoveAndKeepsSavedVariables() {
+        val old = File(addons, "ShortestPathForever/player.txt").apply { parentFile.mkdirs(); writeText("old addon") }
+        val saved = File(game, "WTF/Account/FAKE/SavedVariables/ShortestPathForever.lua").apply {
+            parentFile.mkdirs(); writeText("settings")
+        }
+        val other = File(addons, "Other/user.txt").apply { parentFile.mkdirs(); writeText("other") }
+        // Unrecorded user installations are not removed.
+        assertFalse(ThirdPartyAddons.retireShortestPath(game))
+        privateDir.mkdirs()
+        File(privateDir, "state.json").writeText(JSONObject().put("shortestpath/core", JSONObject()
+            .put("in", "v1.45.3").put("folders", JSONArray(listOf("ShortestPathForever")))).toString())
+        start()
+        DependencyAddons.gameRunning = { true }
+        assertTrue(runCatching { ThirdPartyAddons.retireShortestPath(game) }.isFailure)
+        assertTrue(old.isFile)
+        DependencyAddons.gameRunning = { false }
+        assertTrue(ThirdPartyAddons.retireShortestPath(game))
+        assertFalse(old.exists())
+        assertEquals("old addon", File(game, "Interface/AddOns-disabled-dsforever/ShortestPathForever/player.txt").readText())
+        assertEquals("settings", saved.readText()); assertEquals("other", other.readText())
+        assertFalse(ThirdPartyAddons.retireShortestPath(game))
+        assertFalse(choices["shortestpath.core"] ?: true)
     }
 }

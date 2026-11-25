@@ -49,6 +49,8 @@ local function TN(fn) local v = T(fn); if type(v) == "number" then return v end 
 local function TB(fn) local v = T(fn); if type(v) == "boolean" then return v end end
 
 local function superTracked()
+    local N = WC.focusNav
+    if N and N.point and N.qid then return N.qid end
     -- the route's pin (Map.lua b-route-waypoint) stands for this quest: still the focus while the game super-tracks the pin
     local R = WC.routeWp
     if R and R.active and R.qid and R.qid > 0 then return R.qid end
@@ -1767,6 +1769,11 @@ if type(WC.snapshot) == "function" then
     hooksecurefunc(WC, "snapshot", function(reason)
         if RIDE[reason] then emitQuests(true) end
         if reason == "heartbeat" then pcall(pinsBeat); pcall(areasBeat) end   -- q22 / q33: the current map's documents again
+        -- Questie can finish loading after PLAYER_LOGIN. Retry only a missing focused goal on the existing 15-second heartbeat.
+        local nav = WC.focusNav
+        if reason == "heartbeat" and nav and nav.qid and not nav.point and not nav.paused and nav.enabled and not nav.loading then
+            pcall(nav.refresh)
+        end
     end)
 end
 
@@ -1819,62 +1826,182 @@ end
 
 local OPS = {}
 
--- Companion focus is a Questie destination choice, not just a Blizzard POI choice.
--- Use Questie's own nearest-spawn lookup and SPF's existing TomTom bridge. Keep
--- the waypoint identity: another TomTom caller or guide must never be cancelled.
-local focusWaypoint, focusQuest
-local function focusNavigation(id)
-    local api = ShortestPathForever and ShortestPathForever.API
-    local db = ShortestPathForeverDB
-    if not (api and type(api.JourneyState) == "function" and db and db.focusedQuest and db.journey and db.tomtom) then return end
-    -- A real TomTom owns its own waypoint queue and its separate follow opt-in.
-    if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("TomTom") then return end
-    local ok, state = pcall(api.JourneyState)
-    if not ok or type(state) ~= "table" or state.blocked then return end
-    local char = Questie and Questie.db and Questie.db.char
-    local mine = focusWaypoint and char and char._tom_waypoint == focusWaypoint
-        and TomTom and type(TomTom.IsValidWaypoint) == "function" and TomTom:IsValidWaypoint(focusWaypoint)
-    if state.owner and state.owner ~= "Shortest Path Forever" and not (state.owner == "TomTom" and mine) then return end
-    if mine and focusQuest == id and state.owner == "TomTom" then return end
-    -- SPF's native focused-quest journey has no API owner, so Cancel(owner)
-    -- cannot clear it. Use its existing unprotected clear-journey binding. This
-    -- also prevents a failed game-POI fallback from leaving the previous goal up.
-    if state.busy and not state.owner then
-        local clear = _G.ShortestPathForeverClearJourneyButton
-        if clear and type(clear.Click) == "function" then pcall(clear.Click, clear) end
-    elseif state.owner == "Shortest Path Forever" then
-        api.Cancel(state.owner)
+-- FOCUSED_WAYPOINT_BEGIN: one Questie goal, TomTom arrow, native floating marker. No route planner.
+local N = { owner = "DS Forever focus", enabled = true }
+WC.focusNav = N
+local function navDB()
+    if type(WowCompanionDB) ~= "table" then WowCompanionDB = {} end
+    return WowCompanionDB
+end
+local function samePin(p)
+    local ok, v = pcall(function() return C_Map.GetUserWaypoint() end)
+    return ok and p and v and v.uiMapID == p.map and v.position
+        and math.abs(v.position.x - p.x) < 0.000001 and math.abs(v.position.y - p.y) < 0.000001
+end
+function N.clear(restore)
+    local p, q = N.point, N.qid
+    N.changing = true
+    N.point, N.key = nil, nil
+    if N.uid and TomTom and TomTom.RemoveWaypoint then pcall(TomTom.RemoveWaypoint, TomTom, N.uid) end
+    N.uid = nil
+    if samePin(p) then
+        pcall(function()
+            C_Map.ClearUserWaypoint()
+            if restore and q and inLog(q) then C_SuperTrack.SetSuperTrackedQuestID(q) end
+        end)
     end
-    -- Clear only the last destination this focus path actually installed, including
-    -- when the next quest has no eligible spawn. Never leave A labelled as B.
-    if mine and type(TomTom.RemoveWaypoint) == "function" then TomTom:RemoveWaypoint(focusWaypoint) end
-    focusWaypoint, focusQuest = nil, nil
-    if not id then return end
-    local utils = Questie and Questie.TrackerUtils
-    if not utils and QuestieLoader and type(QuestieLoader.ImportModule) == "function" then
-        local loaded, module = pcall(QuestieLoader.ImportModule, QuestieLoader, "TrackerUtils")
-        if loaded then utils = module end
+    navDB().focusWaypoint = nil
+    N.changing = false
+    if WC.destination then WC.destination.checked = -math.huge; WC.destination.tick() end
+end
+local function module(name)
+    if not (QuestieLoader and type(QuestieLoader.ImportModule) == "function") then return end
+    local ok, value = pcall(QuestieLoader.ImportModule, QuestieLoader, name)
+    if ok then return value end
+end
+local function destination(id)
+    local eligibility, distance, zones = module("TrackerMapEligibility"), module("DistanceUtils"), module("ZoneDB")
+    if not (eligibility and distance and zones) then return end
+    -- Same authoritative eligibility and unfinished-objective/finisher lookup as Questie's own TomTom action.
+    local quest, caps = eligibility.RefreshAndGetCapabilities(id)
+    if not (quest and caps and caps.canNavigateQuest) then return end
+    local spawn, zone, name = distance.GetNearestSpawnForQuest(quest)
+    local map = zone and zones:GetUiMapIdByAreaId(zone)
+    local x, y = spawn and spawn[1], spawn and spawn[2]
+    if type(map) ~= "number" or map <= 0 or type(x) ~= "number" or type(y) ~= "number"
+        or x ~= x or y ~= y or x < 0 or x > 100 or y < 0 or y > 100 then return end
+    return { map = map, x = x / 100, y = y / 100, title = name or tostring(id), qid = id }
+end
+function N.refresh()
+    local explicit = N.explicit
+    N.explicit = false -- one focus gesture, not permission to take a later manual destination during a retry
+    if ShortestPathForever then N.clear(true); return end -- an unrecorded manual planner is not ours to remove or run beside
+    if N.loading or N.paused or not N.enabled or not N.qid or not inLog(N.qid) then N.clear(true); return end
+    if not (TomTom and TomTom.IsCrazyArrowEmpty and TomTom.AddWaypoint and TomTom.SuppressFeature) then N.clear(true); return end
+    local ok, p = pcall(destination, N.qid)
+    if not ok or not p then N.clear(true); return end
+    local key = table.concat({p.qid, p.map, p.x, p.y, p.title}, ":")
+    if key == N.key and N.uid and TomTom:IsValidWaypoint(N.uid) then N.explicit = false; return end
+    N.clear(false)
+    -- Manual destinations yield only to an explicit focus choice, never a quest-progress event.
+    if not explicit and ((C_Map.HasUserWaypoint and C_Map.HasUserWaypoint()) or not TomTom:IsCrazyArrowEmpty()) then
+        N.paused = true; return
     end
-    if not (type(utils) == "table" and type(utils.SetQuestTomTomTarget) == "function") then return end
-    local planned, found = pcall(utils.SetQuestTomTomTarget, id)
-    local uid = char and char._tom_waypoint
-    if planned and found and uid and TomTom and type(TomTom.IsValidWaypoint) == "function" and TomTom:IsValidWaypoint(uid) then
-        focusWaypoint, focusQuest = uid, id
+    N.changing = true
+    TomTom:SuppressFeature(N.owner, "poi")
+    TomTom:SuppressFeature(N.owner, "arrow.setclosest")
+    local added, uid = pcall(TomTom.AddWaypoint, TomTom, p.map, p.x, p.y, {
+        title = p.title, from = N.owner, persistent = false, crazy = true, silent = true,
+        cleardistance = 0, world = false,
+    })
+    -- TomTom deduplicates by map/coordinates/title, not caller. Never adopt and later remove another caller's uid.
+    if added and uid and uid.from == N.owner then
+        N.uid, N.point, N.key = uid, p, key
+        -- UiMapPoint uses the destination's map, never the player's (which can change at a zone boundary).
+        local nativeSet = false
+        local native = pcall(function()
+            if C_Map.CanSetUserWaypointOnMap(p.map) == false then return end
+            local point = UiMapPoint.CreateFromCoordinates(p.map, p.x, p.y)
+            C_Map.SetUserWaypoint(point)
+            nativeSet = true
+            C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+        end)
+        if native and samePin(p) then navDB().focusWaypoint = p
+        elseif native and nativeSet then pcall(C_Map.ClearUserWaypoint) end -- a clamped native map must not leave a false marker
+    elseif added and uid then N.paused = true end
+    N.explicit, N.changing = false, false
+    if WC.destination then WC.destination.checked = -math.huge; WC.destination.tick() end
+end
+function N.choose(id)
+    if id == N.qid and N.point and not N.paused then N.refresh(); return end
+    N.clear(false)
+    N.qid, N.paused, N.explicit = id, false, true
+    N.refresh()
+end
+local navQueued = false
+local function navSoon()
+    if navQueued then return end
+    navQueued = true
+    C_Timer.After(0.25, function() navQueued = false; N.refresh() end)
+end
+local function navStart()
+    local db = navDB()
+    if db.focusNavigation == nil then
+        local old = ShortestPathForeverDB
+        db.focusNavigation = not (type(old) == "table" and old.dsForeverExtAutoQuest == 1
+            and (old.focusedQuest == false or old.journey == false or old.tomtom == false))
+    end
+    N.enabled = db.focusNavigation ~= false
+    if TomTom and TomTom.SuppressFeature and N.enabled then
+        TomTom:SuppressFeature(N.owner, "poi")
+        TomTom:SuppressFeature(N.owner, "arrow.setclosest")
+        if not N.callbacks and TomTom.RegisterCallback then
+            N.callbacks = true
+            TomTom.RegisterCallback(N, "ArrowTargetChanged", function(_, uid)
+                if N.changing or not N.uid or uid == N.uid then return end
+                N.paused = true; N.clear(true)
+            end)
+        end
     end
 end
+local nf = CreateFrame("Frame")
+nf:SetScript("OnEvent", function(_, event)
+    if N.changing then return end
+    if event == "PLAYER_LOGIN" then
+        navStart()
+        local stale = navDB().focusWaypoint
+        if samePin(stale) then N.point, N.qid = stale, stale.qid; N.clear(true) else navDB().focusWaypoint = nil end
+        N.qid = TN(function() return C_SuperTrack.GetSuperTrackedQuestID() end)
+        if N.qid == 0 then N.qid = nil end
+        navSoon()
+    elseif event == "PLAYER_LOGOUT" or event == "LOADING_SCREEN_ENABLED" then
+        N.loading = true; N.clear(true)
+    elseif event == "PLAYER_ENTERING_WORLD" or event == "LOADING_SCREEN_DISABLED" then
+        N.loading = false; navStart(); navSoon()
+    elseif event == "SUPER_TRACKING_CHANGED" then
+        local q = TN(function() return C_SuperTrack.GetSuperTrackedQuestID() end)
+        if q and q > 0 then
+            if q ~= N.qid or not N.point then N.choose(q) end
+        elseif not (N.point and samePin(N.point) and TB(function() return C_SuperTrack.IsSuperTrackingUserWaypoint() end)) then
+            N.qid = nil; N.paused = true; N.clear(false)
+        end
+    elseif event == "USER_WAYPOINT_UPDATED" and N.point and not samePin(N.point) then
+        N.paused = true; N.clear(false)
+    else
+        navSoon()
+    end
+end)
+for _, event in ipairs({ "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_LOGOUT", "LOADING_SCREEN_ENABLED",
+    "LOADING_SCREEN_DISABLED", "SUPER_TRACKING_CHANGED", "USER_WAYPOINT_UPDATED", "QUEST_LOG_UPDATE",
+    "QUEST_WATCH_UPDATE", "QUEST_TURNED_IN", "QUEST_REMOVED", "ZONE_CHANGED_NEW_AREA" }) do
+    pcall(nf.RegisterEvent, nf, event)
+end
+-- An explicit session-safe opt-out. No TomTom saved settings or old SPF settings are rewritten.
+SLASH_WCNAV1 = "/wcnav"
+SlashCmdList.WCNAV = function(msg)
+    local on = tostring(msg):lower() ~= "off"
+    navDB().focusNavigation = on; N.enabled = on
+    if on then navStart(); N.choose(superTracked()) else
+        N.clear(true)
+        if TomTom and TomTom.ReleaseFeature then
+            TomTom:ReleaseFeature(N.owner, "poi"); TomTom:ReleaseFeature(N.owner, "arrow.setclosest")
+        end
+    end
+end
+-- FOCUSED_WAYPOINT_END
+local function focusNavigation(id) N.choose(id) end
 
 function OPS.track(id)
     if not id or not inLog(id) then return ack("track", id, false, "not in log") end
-    -- The retired app planner's pin must not mask the real focus change from SPF.
+    -- Retire the old app planner's pin before the explicit focus choice.
     local R = WC.routeWp
     if R and R.active and type(R.clear) == "function" then R.clear(false, "companion focus") end
-    -- Plan first: the synchronous super-track event then sees the TomTom-owned
-    -- Questie journey and SPF does not also plan a second, game-POI destination.
-    focusNavigation(id)
     if type(WC.stTag) == "function" then WC.stTag("the app's focus push") end
+    N.changing = true
     CALL(function() C_SuperTrack.SetSuperTrackedQuestID(id) end)
+    N.changing = false
+    focusNavigation(id)
     local now = superTracked()
-    if WC.spfRoute then WC.spfRoute.checked = -math.huge end
     if type(WC.snapshotSoon) == "function" then pcall(WC.snapshotSoon, "supertrack") end
     result("track", id, now == id, now ~= id and "did not take" or nil)
 end

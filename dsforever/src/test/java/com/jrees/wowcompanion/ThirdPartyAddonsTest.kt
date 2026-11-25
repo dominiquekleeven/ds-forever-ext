@@ -77,7 +77,7 @@ class ThirdPartyAddonsTest {
         // the real registry's base add-on (Polestar) is never fetched ahead by these tests' start (its worker would call this server)
         ThirdPartyAddons.baseChoice = { false }
         choices["questie.replacement1122"] = true
-        choices["shortestpath.navigation1123"] = true
+        choices["tomtom.navigation1125"] = true
         ThirdPartyAddons.start(object : ThirdPartyAddons.Store {
             override fun get(k: String, d: Boolean) = choices[k] ?: d
             override fun put(k: String, v: Boolean) { choices[k] = v }
@@ -185,14 +185,14 @@ class ThirdPartyAddonsTest {
         assertFalse(File(tmp, "private/dl/Test-1.0.zip").exists())
     }
 
-    @Test fun firstPlayWaitsForShortestPathsExistingDownloadWriter() {
-        zipBytes = zipOf("ShortestPathForever/ShortestPathForever.toc" to
-            "## Interface: 16001\n## Version: 1.45.3\n## X-Forever-Core: v1.17.1\nLibs/Core.lua\n",
-            "ShortestPathForever/Libs/Core.lua" to "-- synthetic embedded core")
+    @Test fun firstPlayWaitsForTomTomsExistingDownloadWriter() {
+        zipBytes = zipOf("TomTom/TomTom.toc" to
+            "## Interface: 120100, 16001\n## Version: v4.4.1-release\ncore/waypoints.lua\n",
+            "TomTom/core/waypoints.lua" to "-- synthetic waypoint core")
         val sample = addon(zipBytes)
-        val a = sample.copy(id = "shortestpath", core = sample.core.copy(folders = listOf("ShortestPathForever")))
+        val a = sample.copy(id = "tomtom", core = sample.core.copy(folders = listOf("TomTom")))
         ThirdPartyAddons.ALL = listOf(a)
-        choices["shortestpath.core"] = true
+        choices["tomtom.core"] = true
         downloadDelayMs = 200
         val download = Thread { ThirdPartyAddons.fetchNow(a, "core") }.apply { start() }
         val until = System.currentTimeMillis() + 5_000

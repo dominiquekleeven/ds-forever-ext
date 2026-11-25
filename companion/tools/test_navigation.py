@@ -1,18 +1,15 @@
-"""Run pinned upstream Lua, without a client or network. Requires lupa (Lua 5.1).
-
-Inputs: SHORTEST_PATH_FOREVER_ZIP and QUESTIE_BUNDLE_ZIP. Archives stay outside the repo.
-"""
+"""Local Lua 5.1 regressions using the pinned official TomTom and Questie archives. No client/network."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import unittest
 import zipfile
-
 from lupa.lua51 import LuaRuntime
 
-
-SPF = Path(os.environ.get("SHORTEST_PATH_FOREVER_ZIP",
-    "/tmp/opencode/ds-ext-navigation/ShortestPathForever-v1.45.3-forever.zip"))
+ROOT = Path(__file__).resolve().parents[1]
+ADDONS = ROOT / "app/src/main/assets/companion/addons"
+TOMTOM = Path(os.environ.get("TOMTOM_ZIP", "/tmp/opencode/TomTom-v4.4.1-release.zip"))
 QUESTIE = Path(os.environ.get("QUESTIE_BUNDLE_ZIP", "/tmp/opencode/questie-12.12.0.zip"))
 
 
@@ -21,184 +18,199 @@ def source(archive, name):
         return z.read(name).decode("utf-8")
 
 
-def enable_automatic_navigation(lua):
-    hub = (Path(__file__).resolve().parents[1] /
-           "app/src/main/assets/companion/addons/WowCompanionHub/Hub.lua").read_text()
-    start = hub.index("function hub.enableFocusedQuestNavigation()")
-    end = hub.index('\nf:SetScript("OnEvent"', start)
-    lua.execute(hub[start:end])
+def plain(t):
+    if hasattr(t, "items"):
+        return {str(k): plain(v) for k, v in t.items()}
+    return t
 
 
-@unittest.skipUnless(SPF.is_file() and QUESTIE.is_file(), "provide the pinned upstream ZIP inputs")
+def function(lua, code, signature):
+    start = code.index(signature)
+    lua.execute(code[start:code.index("\nend", start) + 4])
+
+
+def rig():
+    lua = LuaRuntime()
+    lua.globals().encode = lambda t: json.dumps(plain(t), sort_keys=True)
+    lua.execute("""
+        time=0; qid=0; frames={}; timers={}; callbacks={}; docs={}; adds=0; nativeSets=0
+        function emit(e) for _,f in ipairs(frames) do if f.events[e] and f.handler then f.handler(f,e) end end end
+        function drain() local t=timers;timers={};for _,fn in ipairs(t) do fn() end end
+        function CreateFrame() local f={events={}};frames[#frames+1]=f
+            function f:RegisterEvent(e) self.events[e]=true end
+            function f:SetScript(_,fn) self.handler=fn end;return f end
+        C_Timer={After=function(_,fn) timers[#timers+1]=fn end}
+        GetTime=function() return time end
+        TN=function(fn) return fn() end; TB=TN; SlashCmdList={}
+        WowCompanionDB={}; WC={encode=encode,send=function(s) docs[#docs+1]=s end,push=function() end,
+            collectPos=function() end,collectMap=function() end}
+        CreateVector2D=function(x,y) return {x=x,y=y,GetXY=function() return x,y end} end
+        UiMapPoint={CreateFromCoordinates=function(m,x,y) return {uiMapID=m,position=CreateVector2D(x,y)} end}
+        C_Map={GetUserWaypoint=function() return pin end,HasUserWaypoint=function() return pin~=nil end,
+            ClearUserWaypoint=function() pin=nil;onPin=false;emit('USER_WAYPOINT_UPDATED') end,
+            SetUserWaypoint=function(p) nativeSets=nativeSets+1;pin=p;emit('USER_WAYPOINT_UPDATED') end,
+            CanSetUserWaypointOnMap=function() return true end,
+            GetWorldPosFromMapPos=function(m,p) return m,CreateVector2D(p.x*100,p.y*100) end}
+        C_SuperTrack={GetSuperTrackedQuestID=function() return qid end,
+            SetSuperTrackedQuestID=function(id) qid=id;onPin=false;emit('SUPER_TRACKING_CHANGED') end,
+            IsSuperTrackingUserWaypoint=function() return onPin end,
+            SetSuperTrackedUserWaypoint=function(on) onPin=on;qid=0;emit('SUPER_TRACKING_CHANGED') end}
+        quests={}; inLog=function(id) return quests[id]~=nil end
+        superTracked=function() return WC.focusNav and WC.focusNav.point and WC.focusNav.qid or (qid>0 and qid or nil) end
+        modules={};QuestieLoader={CreateModule=function(_,name) modules[name]={};return modules[name] end,
+            ImportModule=function(_,name) return modules[name] end}
+        modules.TrackerData={RefreshQuest=function(id) return quests[id] end}
+        modules.DistanceUtils={}; modules.ZoneDB={GetUiMapIdByAreaId=function(_,zone) return zone end}
+        function quest(id)
+            local a={Index=1,Needed=1,Collected=0,spawnList={{id,25}}}
+            local b={Index=2,Needed=1,Collected=0,spawnList={{id+10,75}}}
+            a.enrichment=a;b.enrichment=b
+            local q={Id=id,Objectives={a,b},SpecialObjectives={},Finisher={NPC={1}},
+                IsComplete=function(self) return self.done and 1 or 0 end}
+            q.enrichment=q;quests[id]=q;return q
+        end
+        quest(42);quest(43)
+        TomTom={L=setmetatable({},{__index=function(_,k) return k end}), hbd={GetLocalizedMap=function() return 'Test' end},
+            private={AddSettingsSection=function() end,TrackDistance=function() end,UntrackDistance=function() end},
+            profile={persistence={cleardistance=10},arrow={arrival=15},general={}},waypointprofile={}}
+        function TomTom:FireMessage(e,uid)
+            if e=='TOMTOM_WAYPOINT_REMOVED' and arrow==uid then arrow=nil
+                if callbacks.ArrowTargetChanged then callbacks.ArrowTargetChanged('ArrowTargetChanged',nil) end end
+        end
+        function TomTom:SetCrazyArrow(uid) arrow=uid
+            if callbacks.ArrowTargetChanged then callbacks.ArrowTargetChanged('ArrowTargetChanged',uid) end end
+        function TomTom:IsCrazyArrowEmpty() return arrow==nil end
+        TomTom.RegisterCallback=function(_,e,fn) callbacks[e]=fn end
+        TomTom.private.FireCallback=function(e,uid) if e=='WaypointAdded' then adds=adds+1 end end
+    """)
+    lua.execute(source(TOMTOM, "TomTom/core/waypoints.lua"), "TomTom", lua.globals().TomTom)
+    lua.execute(source(TOMTOM, "TomTom/core/suppress.lua"), "TomTom", lua.globals().TomTom)
+    lua.execute(source(QUESTIE, "Questie/Modules/Tracker/TrackerMapEligibility.lua"))
+    distance = source(QUESTIE, "Questie/Modules/Libs/DistanceUtils.lua")
+    lua.execute("DistanceUtils=modules.DistanceUtils")
+    function(lua, distance, "function DistanceUtils.GetNearestSpawnForQuest(")
+    lua.execute("""
+        DistanceUtils.GetNearestObjective=function(list) return list[1],99,'Objective',list[1][1] end
+        DistanceUtils.GetNearestFinisherOrStarter=function() return {90,90},99,'Turn in' end
+    """)
+    code = (ADDONS / "WowCompanionQuests/Quests.lua").read_text()
+    lua.execute(code[code.index("-- FOCUSED_WAYPOINT_BEGIN"):code.index("-- FOCUSED_WAYPOINT_END")])
+    code = (ADDONS / "WowCompanion/Map.lua").read_text()
+    lua.execute(code[code.index("-- DESTINATION_BEGIN"):code.index("-- DESTINATION_END")])
+    lua.execute("emit('PLAYER_LOGIN');drain()")
+    return lua
+
+
+@unittest.skipUnless(TOMTOM.is_file() and QUESTIE.is_file(), "provide pinned official archive inputs")
 class NavigationTest(unittest.TestCase):
-    def test_automatic_default_runs_once_and_preserves_later_opt_out(self):
-        lua = LuaRuntime()
-        lua.execute("hub = {}")
-        enable_automatic_navigation(lua)
+    def test_official_pins_and_forever_gamepad_support(self):
+        self.assertEqual(11790690, TOMTOM.stat().st_size)
+        self.assertEqual("68a93f8dfa4ecd3cafe28b0999b47ee62e65f0096b5e5982e6725ba83c10bffc", hashlib.sha256(TOMTOM.read_bytes()).hexdigest())
+        self.assertEqual("116eadd5833836d1b8ff30c9c8b5aaf724bc2de75eea362d6eee3d9962506b5f", hashlib.sha256(QUESTIE.read_bytes()).hexdigest())
+        toc = source(TOMTOM, "TomTom/TomTom.toc")
+        self.assertIn("16001", toc.splitlines()[0])
+        self.assertIn("## Version: v4.4.1-release", toc)
+        self.assertIn("## License: All Rights Reserved", toc)
+        for name in ("worldmap_pins", "map_click"):
+            self.assertIn("IsGamepadUI", source(TOMTOM, f"TomTom/modules/{name}.lua"))
+        self.assertIn("WoWForever", source(TOMTOM, "TomTom/libs/HereBeDragons/HereBeDragons-2.0.lua"))
+
+    def test_focus_progress_finisher_missing_and_unfocus(self):
+        lua = rig()
         lua.execute("""
-            hub.enableFocusedQuestNavigation()
-            assert(ShortestPathForeverDB == nil, 'do not create another addons saved table')
-            ShortestPathForever = {}
-            ShortestPathForeverDB = {focusedQuest=false, arrow=false, minimapLine=true, custom='keep'}
-            hub.enableFocusedQuestNavigation()
-            assert(ShortestPathForeverDB.focusedQuest == true)
-            assert(ShortestPathForeverDB.dsForeverExtPreviousFocusedQuest == false)
-            assert(ShortestPathForeverDB.arrow == false and ShortestPathForeverDB.custom == 'keep')
-            ShortestPathForeverDB.focusedQuest = false
-            hub.enableFocusedQuestNavigation()
-            assert(ShortestPathForeverDB.focusedQuest == false, 'later player opt-out must stand')
-            assert(ShortestPathForeverDB.dsForeverExtPreviousFocusedQuest == false)
+            N=WC.focusNav;N.choose(42);assert(arrow[2]==.42 and pin.uiMapID==99 and nativeSets==1)
+            N.refresh();N.choose(42);assert(adds==1 and nativeSets==1, 'identical point is not requeued')
+            N.choose(43);assert(arrow[2]==.43 and adds==2)
+            quests[43].Objectives[1].Collected=1;emit('QUEST_LOG_UPDATE');emit('QUEST_LOG_UPDATE')
+            assert(#timers==1);drain();assert(arrow[2]==.53 and adds==3)
+            quests[43].done=true;emit('QUEST_WATCH_UPDATE');drain();assert(arrow.title=='Turn in' and arrow[2]==.9)
+            quests[43]=nil;emit('QUEST_TURNED_IN');drain();assert(not arrow and not pin and not N.point)
+            N.choose(42);N.choose(95);assert(not arrow and not pin)
+            N.choose(42);N.choose(nil);assert(not arrow and not pin)
         """)
 
-    def test_actual_focused_quest_handler_routes_without_map_click_once_per_change(self):
-        lua = LuaRuntime()
+    def test_native_focus_and_manual_destinations_do_not_loop_or_disappear(self):
+        lua = rig()
         lua.execute("""
-            hub = {}; questID = 10; routes = 0; owner = nil
-            ShortestPathForever = {}; ShortestPathForeverDB = {focusedQuest=false, journey=true}
-            C_SuperTrack = {GetSuperTrackedQuestID=function() return questID end}
-            C_Map = {}; Enum = {}; L = {}
-            ns = {db=ShortestPathForeverDB, JourneyOwner=function() return owner end,
-                  JourneyToTrackedQuest=function() routes=routes+1 end}
-        """)
-        enable_automatic_navigation(lua)
-        text = source(SPF, "ShortestPathForever/Journey/JourneyInput.lua")
-        start = text.index("local focusedQuest")
-        end = text.index("-- The journey key is this addon's gesture", start)
-        lua.execute(text[start:end])
-        lua.execute("""
-            hub.enableFocusedQuestNavigation()
-            ns.FocusedTrackingReset()
-            questID = 42
-            ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED')
-            assert(routes == 1, 'focused quest must start guidance without a click')
-            ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED')
-            assert(routes == 1, 'unchanged focus must not plan twice')
-            questID = 43; ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED'); assert(routes == 2)
-            owner = 'Other guide'
-            questID = 44; ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED'); assert(routes == 2)
-            owner = nil; ns.db.focusedQuest = false
-            questID = 45; ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED'); assert(routes == 2)
-            questID = 0; ns.FocusedTrackingChanged('SUPER_TRACKING_CHANGED'); assert(routes == 2)
+            N=WC.focusNav;C_SuperTrack.SetSuperTrackedQuestID(42);assert(arrow[2]==.42)
+            manual=TomTom:AddWaypoint(12,.1,.2,{title='Manual',crazy=true,persistent=false,silent=true})
+            assert(N.paused and not N.point and arrow==manual and not pin)
+            emit('QUEST_LOG_UPDATE');drain();assert(arrow==manual)
+            N.choose(43);assert(arrow~=manual and TomTom:IsValidWaypoint(manual))
+            C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(12,.2,.3))
+            assert(N.paused and pin.uiMapID==12 and not N.point)
+            emit('QUEST_LOG_UPDATE');drain();assert(pin.uiMapID==12)
+            N.choose(42);C_SuperTrack.SetSuperTrackedQuestID(0);assert(not N.point and not pin)
+            assert(TomTom:IsFeatureSuppressed('poi'))
         """)
 
-    def test_pins_load_list_and_defaults(self):
-        self.assertEqual(20_019_152, SPF.stat().st_size)
-        self.assertEqual("09a54bb8ed17d4cff74211321202b4c66de180a7e9e53f5713a7ec52ff993ef9",
-                         hashlib.sha256(SPF.read_bytes()).hexdigest())
-        self.assertEqual("116eadd5833836d1b8ff30c9c8b5aaf724bc2de75eea362d6eee3d9962506b5f",
-                         hashlib.sha256(QUESTIE.read_bytes()).hexdigest())
-        toc = source(SPF, "ShortestPathForever/ShortestPathForever.toc")
-        for field in ("## Interface: 16001", "## Version: 1.45.3", "## X-Forever-Core: v1.17.1",
-                      "## X-License: GPL-3.0-or-later"):
-            self.assertIn(field, toc)
-        self.assertNotRegex(toc, r"(?m)^## (RequiredDeps|Dependencies):")
-        with zipfile.ZipFile(SPF) as z:
-            self.assertEqual({"ShortestPathForever"}, {n.split('/')[0] for n in z.namelist()})
-            for line in toc.splitlines():
-                if line.strip() and not line.startswith('#'):
-                    self.assertIn("ShortestPathForever/" + line.strip().replace('\\', '/'), z.namelist())
-        core = source(SPF, "ShortestPathForever/Core/Core.lua")
-        defaults = core[core.index("local DEFAULTS = {"):core.index("ns.Defaults = DEFAULTS")]
-        lua = LuaRuntime()
-        db = lua.execute(defaults + "\nreturn DEFAULTS")
-        for key in ("arrow", "minimapLine", "mapLine", "journey", "tomtom"):
-            self.assertTrue(db[key], key)
-        self.assertFalse(db.focusedQuest)
-        self.assertFalse(db.tomtomFollow)
-        route = source(SPF, "ShortestPathForever/UI/Route.lua")
-        self.assertIn("if ns.db.minimapLine == false then", route)
-        self.assertIn("Strokes.Minimap(journeyStrokes, linePaths, view)", route)
-        self.assertIn("line:SetTexture(DOT_TEXTURE)", route)
-        self.assertIn("return ns.db.arrow ~= false", source(SPF, "ShortestPathForever/UI/Arrow.lua"))
-        input_source = source(SPF, "ShortestPathForever/Journey/JourneyInput.lua")
-        self.assertIn("if not IsAltKeyDown() or IsShiftKeyDown() then", input_source)
-
-    def test_actual_questie_target_through_actual_shim_routes_once(self):
-        lua = LuaRuntime()
+    def test_loading_logout_reload_and_opt_out(self):
+        lua = rig()
         lua.execute("""
-            routes, cancelled, inits = {}, {}, {}
-            canaccessvalue = function() return true end
-            C_Map = {GetMapInfo = function(id) return {mapID=id} end}
-            C_AddOns = {DoesAddOnExist = function() return false end}
-            UnitGUID = function() return 'test-player' end
-            function CreateFrame()
-                return {RegisterEvent=function() end, UnregisterEvent=function() end,
-                        SetScript=function(self, event, fn) self[event]=fn end}
-            end
-            function hooksecurefunc(t, k, hook)
-                local original = t[k]
-                t[k] = function(...) local result = original(...); hook(...); return result end
-            end
-            TrackerUtils = {}
-            Questie = {db={char={}}}
-            QuestieLoader = {ImportModule=function(_, name)
-                assert(name == 'TrackerUtils'); return TrackerUtils
-            end}
-            TrackerMapEligibility = {RefreshAndGetCapabilities=function(id)
-                return {Id=id}, {canNavigateQuest = id == 42}
-            end}
-            DistanceUtils = {GetNearestSpawnForQuest=function() return {25,75}, 12, 'Quest target' end}
-            ZoneDB = {GetUiMapIdByAreaId=function(_, zone) assert(zone==12); return 99 end}
-            ns = {
-                db={tomtom=true, journey=true},
-                Init=function(fn) inits[#inits+1]=fn end,
-                QuestID=function(id) return type(id)=='number' and id>0 and id%1==0 and id or nil end,
-                JourneyChanged=function() end, PointGuideArrow=function() end
-            }
-            ShortestPathForever = {API={
-                NavigateRoute=function(owner, stops)
-                    routes[#routes+1] = {owner=owner, stops=stops}; return true
-                end,
-                Cancel=function(owner) cancelled[#cancelled+1]=owner end,
-                CurrentStop=function() return nil end
-            }}
-        """)
-        tracker = source(QUESTIE, "Questie/Modules/Tracker/TrackerUtils.lua")
-        # Run the real three synchronous handlers, with only game/data lookups stubbed.
-        for signature in ("TrackerUtils.IsTomTomAvailable()", "TrackerUtils:SetTomTomTarget(title, zone, x, y)",
-                          "TrackerUtils.SetQuestTomTomTarget(questId, expectedQuest)"):
-            start = tracker.index("function " + signature)
-            end = tracker.index("\nend", start) + len("\nend")
-            lua.execute(tracker[start:end])
-        lua.execute(source(SPF, "ShortestPathForever/Core/TomTom.lua"), "ShortestPathForever", lua.globals().ns)
-        lua.execute("""
-            for _, fn in ipairs(inits) do fn() end
-            assert(TrackerUtils.IsTomTomAvailable())
-            assert(TrackerUtils.SetQuestTomTomTarget(42) == true)
-            assert(#routes == 1)
-            assert(routes[1].owner == 'TomTom')
-            local stop = routes[1].stops[1]
-            assert(stop.map == 99 and stop.x == .25 and stop.y == .75)
-            assert(stop.questID == 42 and stop.title == 'Quest target')
-            TomTom:SetCrazyArrow(Questie.db.char._tom_waypoint)
-            assert(#routes == 1, 'same waypoint must not plan twice')
-            assert(TrackerUtils.SetQuestTomTomTarget(0) == false)
-            assert(#routes == 1, 'ineligible quest must not plan')
-            assert(TomTom:RemoveWaypoint(Questie.db.char._tom_waypoint))
-            assert(#cancelled == 1 and cancelled[1] == 'TomTom')
-            ns.db.tomtom = false
-            ns.RefreshTomTom()
-            assert(TomTom == nil, 'player shim opt-out must stand')
+            N=WC.focusNav;N.choose(42);emit('LOADING_SCREEN_ENABLED');assert(not pin and not arrow)
+            emit('QUEST_LOG_UPDATE');drain();assert(not arrow)
+            emit('LOADING_SCREEN_DISABLED');drain();assert(arrow and N.qid==42)
+            emit('PLAYER_LOGOUT');assert(not pin and not arrow and not WowCompanionDB.focusWaypoint)
+            N.loading=false;N.choose(42);stale=WowCompanionDB.focusWaypoint
+            emit('PLAYER_LOGIN');assert(not pin and not WowCompanionDB.focusWaypoint)
+            drain();assert(arrow and N.qid==42)
+            SlashCmdList.WCNAV('off');assert(not arrow and not pin and not N.enabled)
+            emit('PLAYER_ENTERING_WORLD');drain();N.choose(43);assert(not arrow and WowCompanionDB.focusNavigation==false)
+            assert(not TomTom:IsFeatureSuppressed('poi'))
         """)
 
-    def test_actual_minimap_walk_geometry_is_separated_breadcrumbs(self):
-        lua = LuaRuntime()
-        lua.execute("ns = {FlightLinePoints=function(path) return path.points end}")
-        lua.execute(source(SPF, "ShortestPathForever/UI/Strokes.lua"), "ShortestPathForever", lua.globals().ns)
+    def test_old_saved_opt_out_migrates_once_without_rewriting_old_settings(self):
+        lua = rig()
         lua.execute("""
-            local strokes = ns.Strokes.New()
-            ns.Strokes.Minimap(strokes, {
-                {mode='walk', points={{map=1,x=0,y=0}, {map=1,x=0,y=-90}}}
-            }, {x=0,y=0,map=1,radius=100,facing=0,width=200,height=200,scale=1,
-                colors={walk={1,1,0,1}}, goalRadius=5})
-            assert(strokes.n > 3, 'walk must generate breadcrumbs')
-            for i=1,strokes.n do
-                assert(strokes.dot[i], 'walk must use dot texture')
-                assert(strokes.width[i] == 4)
-                if i > 1 then
-                    assert(strokes.x1[i] > strokes.x2[i-1], 'breadcrumbs must have gaps')
-                end
-            end
+            WowCompanionDB.focusNavigation=nil;ShortestPathForeverDB={dsForeverExtAutoQuest=1,focusedQuest=false,custom=123}
+            emit('PLAYER_LOGIN');assert(not WC.focusNav.enabled)
+            SlashCmdList.WCNAV('on');emit('PLAYER_LOGIN');assert(WC.focusNav.enabled)
+            assert(ShortestPathForeverDB.focusedQuest==false and ShortestPathForeverDB.custom==123)
+        """)
+
+    def test_changed_lua_compiles_and_no_planner_hooks(self):
+        lua = LuaRuntime(unpack_returned_tuples=True)
+        compile_lua = lua.eval("function(s) local f,e=loadstring(s);return f~=nil,e end")
+        for path in ("WowCompanionQuests/Quests.lua", "WowCompanion/Map.lua", "WowCompanionHub/Hub.lua"):
+            code = (ADDONS / path).read_text()
+            ok, error = compile_lua(code)
+            self.assertTrue(ok, error)
+        code = (ADDONS / "WowCompanionQuests/Quests.lua").read_text()
+        bridge = code[code.index("-- FOCUSED_WAYPOINT_BEGIN"):code.index("-- FOCUSED_WAYPOINT_END")]
+        for forbidden in ("OnUpdate", "NewTicker", "OpenWorldMap", "SetClosestWaypoint", "ShortestPathForever.API", "QuestieDB"):
+            self.assertNotIn(forbidden, bridge)
+
+    def test_manual_uid_collision_clamped_native_and_manual_spf_fail_closed(self):
+        lua = rig()
+        lua.execute("""
+            N=WC.focusNav
+            manual=TomTom:AddWaypoint(99,.42,.25,{title='Objective',from='Other',crazy=true,persistent=false,silent=true})
+            N.choose(42);assert(not N.uid and N.paused and TomTom:IsValidWaypoint(manual))
+            N.choose(nil);assert(TomTom:IsValidWaypoint(manual))
+            C_Map.SetUserWaypoint=function(p) pin=UiMapPoint.CreateFromCoordinates(12,.5,.5) end
+            N.choose(43);assert(N.point and arrow[2]==.43 and not pin, 'clamped native coordinates must not survive')
+            ShortestPathForever={};N.refresh();assert(not N.point and not N.uid)
+            assert(TomTom:IsValidWaypoint(manual))
+        """)
+        focus = source(QUESTIE, "Questie/Modules/Tracker/LinePool/QuestFocusButton.lua")
+        self.assertIn("QuestieCompat.SetSuperTrackedQuestID(self.questId)", focus)
+
+    def test_existing_heartbeat_recovers_delayed_questie_without_taking_manual_goal(self):
+        lua = rig()
+        lua.execute("""
+            hooksecurefunc=function(_,_,fn) snapshotHook=fn end
+            WC.snapshot=function() end;emitQuests=function() end;pinsBeat=function() end;areasBeat=function() end
+            local original=inLog;inLog=function(id) return id==44 or id==45 or original(id) end
+        """)
+        code = (ADDONS / "WowCompanionQuests/Quests.lua").read_text()
+        a = code.index("local RIDE = { heartbeat")
+        lua.execute(code[a:code.index("-- ---------------------------------------------------------------- commands", a)])
+        lua.execute("""
+            N=WC.focusNav;N.choose(44);assert(not N.point)
+            quest(44);snapshotHook('heartbeat');assert(N.point and N.qid==44)
+            before=adds;snapshotHook('heartbeat');assert(adds==before)
+            N.choose(45);manual=TomTom:AddWaypoint(12,.1,.2,{title='Manual',crazy=true,persistent=false,silent=true})
+            quest(45);snapshotHook('heartbeat');assert(N.paused and arrow==manual and not N.point)
         """)
 
 

@@ -49,13 +49,11 @@ class PerformanceHudView(
     context: Context,
     private val fpsProvider: () -> Float?,
     initialConfig: PerformanceHudConfig = PerformanceHudConfig(),
-    initialCompactMode: Boolean = false,
     private val gameFpsProvider: () -> Float? = { null },
 ) : FrameLayout(context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var updateJob: Job? = null
     private var config = initialConfig
-    private var isCompactMode = initialCompactMode
     private var lastSnapshot: HudSnapshot? = null
     private var attachedMetricSignature: List<MetricSignature> = emptyList()
     private var appearance = appearanceFor(initialConfig.size)
@@ -64,14 +62,6 @@ class PerformanceHudView(
 
     private val backgroundDrawable = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
-    }
-
-    private val stackedContainer = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        layoutParams = LayoutParams(
-            LayoutParams.WRAP_CONTENT,
-            LayoutParams.WRAP_CONTENT,
-        )
     }
 
     private val compactContainer = WrapLayout(context).apply {
@@ -128,31 +118,17 @@ class PerformanceHudView(
         tuneMetric,
     )
 
-    private val allTextRows = allMetrics.flatMap { listOf(it.stackedText, it.compactText) }
-    private val allGraphs = allMetrics.flatMap { listOfNotNull(it.stackedGraph, it.compactGraph) }
+    private val allTextRows = allMetrics.map { it.compactText }
+    private val allGraphs = allMetrics.mapNotNull { it.compactGraph }
 
     private val cpuSampler = CpuUsageSampler()
     private val gpuSampler = GpuUsageSampler()
 
     init {
         background = backgroundDrawable
-        addView(stackedContainer)
         addView(compactContainer)
         applyAppearance()
-        applyLayoutMode()
         refreshVisibleMetrics()
-    }
-
-    fun isCompactMode(): Boolean = isCompactMode
-
-    fun setCompactMode(compactMode: Boolean) {
-        if (isCompactMode == compactMode) {
-            return
-        }
-
-        isCompactMode = compactMode
-        applyLayoutMode()
-        requestLayout()
     }
 
     fun setConfig(config: PerformanceHudConfig) {
@@ -192,11 +168,6 @@ class PerformanceHudView(
     override fun onDetachedFromWindow() {
         stopUpdates()
         super.onDetachedFromWindow()
-    }
-
-    private fun applyLayoutMode() {
-        stackedContainer.visibility = if (isCompactMode) GONE else VISIBLE
-        compactContainer.visibility = if (isCompactMode) VISIBLE else GONE
     }
 
     private fun startUpdates() {
@@ -279,20 +250,9 @@ class PerformanceHudView(
 
     private fun applyMetricAppearance(metric: MetricViews) {
         val textColor = blendMetricColor(metric.baseTextColor)
-        metric.stackedText.setTextColor(textColor)
         metric.compactText.setTextColor(textColor)
-        metric.stackedText.setPadding(0, appearance.rowVerticalPaddingDp.dp, 0, 0)
         metric.compactText.setPadding(0, 0, 0, 0)
-        metric.stackedGraph?.setLineColor(blendMetricColor(metric.baseGraphColor ?: metric.baseTextColor))
         metric.compactGraph?.setLineColor(blendMetricColor(metric.baseGraphColor ?: metric.baseTextColor))
-
-        (metric.stackedGraph?.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
-            params.width = appearance.stackedGraphWidthDp.dp
-            params.height = appearance.stackedGraphHeightDp.dp
-            params.topMargin = appearance.stackedGraphTopMarginDp.dp
-            params.bottomMargin = appearance.stackedGraphBottomMarginDp.dp
-            metric.stackedGraph.layoutParams = params
-        }
 
         (metric.compactGraph?.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
             params.width = appearance.compactGraphWidthDp.dp
@@ -402,11 +362,8 @@ class PerformanceHudView(
     }
 
     private fun recordGraphSamples(snapshot: HudSnapshot) {
-        fpsMetric.stackedGraph?.addSample(snapshot.fpsValue)
         fpsMetric.compactGraph?.addSample(snapshot.fpsValue)
-        cpuMetric.stackedGraph?.addSample(snapshot.cpuValue)
         cpuMetric.compactGraph?.addSample(snapshot.cpuValue)
-        gpuMetric.stackedGraph?.addSample(snapshot.gpuValue)
         gpuMetric.compactGraph?.addSample(snapshot.gpuValue)
     }
 
@@ -429,7 +386,6 @@ class PerformanceHudView(
 
     private fun updateMetricText(metric: MetricViews, text: String?) {
         val safeText = text.orEmpty()
-        metric.stackedText.text = safeText
         metric.compactText.text = safeText
     }
 
@@ -471,13 +427,11 @@ class PerformanceHudView(
         enabled: Boolean,
         showGraph: Boolean = false,
     ) {
-        val hasText = metric.stackedText.text.isNotBlank()
+        val hasText = metric.compactText.text.isNotBlank()
         val shouldShowText = enabled && hasText
         val shouldShowGraph = showGraph && metric.supportsGraph
 
-        metric.stackedText.visibility = if (shouldShowText) VISIBLE else GONE
         metric.compactText.visibility = if (shouldShowText) VISIBLE else GONE
-        metric.stackedGraph?.visibility = if (shouldShowGraph) VISIBLE else GONE
         metric.compactGraph?.visibility = if (shouldShowGraph) VISIBLE else GONE
 
         if (shouldShowText || shouldShowGraph) {
@@ -492,21 +446,9 @@ class PerformanceHudView(
     }
 
     private fun rebuildVisibleMetrics(visibleMetrics: List<VisibleMetric>) {
-        stackedContainer.removeAllViews()
         compactContainer.removeAllViews()
 
-        visibleMetrics.forEachIndexed { index, visibleMetric ->
-            stackedContainer.addView(
-                visibleMetric.metric.stackedContainer,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ).apply {
-                    if (index < visibleMetrics.lastIndex) {
-                        bottomMargin = appearance.rowSpacingDp.dp
-                    }
-                },
-            )
+        visibleMetrics.forEach { visibleMetric ->
             compactContainer.addView(visibleMetric.metric.compactContainer)
         }
     }
@@ -517,38 +459,11 @@ class PerformanceHudView(
         graphColor: Int? = null,
         graphScaleMode: GraphScaleMode? = null,
     ): MetricViews {
-        val stackedText = createTextView(textColor)
         val compactText = createTextView(textColor)
-        val stackedGraph = if (graphColor != null && graphScaleMode != null) {
-            MetricGraphView(context, graphColor, graphScaleMode)
-        } else {
-            null
-        }
         val compactGraph = if (graphColor != null && graphScaleMode != null) {
             MetricGraphView(context, graphColor, graphScaleMode)
         } else {
             null
-        }
-
-        val stackedContainer = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(
-                stackedText,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ),
-            )
-            stackedGraph?.let {
-                addView(
-                    it,
-                    LinearLayout.LayoutParams(
-                        appearance.stackedGraphWidthDp.dp,
-                        appearance.stackedGraphHeightDp.dp,
-                    ),
-                )
-                it.visibility = GONE
-            }
         }
 
         val compactContainer = LinearLayout(context).apply {
@@ -559,6 +474,7 @@ class PerformanceHudView(
                 LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
+                    1f,
                 ),
             )
             compactGraph?.let {
@@ -575,14 +491,11 @@ class PerformanceHudView(
 
         return MetricViews(
             id = id,
-            supportsGraph = stackedGraph != null && compactGraph != null,
+            supportsGraph = compactGraph != null,
             baseTextColor = textColor,
             baseGraphColor = graphColor,
-            stackedText = stackedText,
             compactText = compactText,
-            stackedContainer = stackedContainer,
             compactContainer = compactContainer,
-            stackedGraph = stackedGraph,
             compactGraph = compactGraph,
         )
     }
@@ -685,11 +598,8 @@ class PerformanceHudView(
         val supportsGraph: Boolean,
         val baseTextColor: Int,
         val baseGraphColor: Int?,
-        val stackedText: TextView,
         val compactText: TextView,
-        val stackedContainer: LinearLayout,
         val compactContainer: LinearLayout,
-        val stackedGraph: MetricGraphView? = null,
         val compactGraph: MetricGraphView? = null,
     )
 

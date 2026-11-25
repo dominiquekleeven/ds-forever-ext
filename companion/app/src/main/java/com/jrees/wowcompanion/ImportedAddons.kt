@@ -253,7 +253,7 @@ object ImportedAddons {
     fun protectedName(name: String): Boolean {
         val n = name.lowercase()
         if (n.startsWith("wowcompanion") || n.startsWith("blizzard_")) return true
-        val managed = listOf(DependencyAddons.STAGING, DependencyAddons.BACKUP, "AddOns-disabled-dsforever", "Polestar", "Polestar_Nav") + ownFolders +
+        val managed = listOf(DependencyAddons.STAGING, DependencyAddons.BACKUP, "AddOns-disabled-dsforever", "Polestar", "Polestar_Nav", "ShortestPathForever") + ownFolders +
             ThirdPartyAddons.ALL.flatMap { a -> a.pkgs().flatMap { (_, p) -> p.folders } } + DependencyAddons.DEPS.map { it.folder }
         return managed.any { m -> m.lowercase().let { n == it || n.startsWith("$it-") } }
     }

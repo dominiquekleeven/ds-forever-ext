@@ -2234,7 +2234,6 @@ class WorldMapRoomView(context: Context) : View(context) {
                 floatArrayOf(sx(u.toFloat()), sy(v.toFloat()))
             } else floatArrayOf(sx(w!!.nx(wy).toFloat()), sy(w.ny(wx).toFloat()))
         }
-        postInvalidateOnAnimation()
     }
 
     /** the filter funnel (top right) and the panel toggle (bottom right), the game's own pieces when the kit has them */

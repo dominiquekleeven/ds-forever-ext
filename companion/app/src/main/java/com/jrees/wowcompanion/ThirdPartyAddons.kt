@@ -118,13 +118,14 @@ object ThirdPartyAddons {
             "116eadd5833836d1b8ff30c9c8b5aaf724bc2de75eea362d6eee3d9962506b5f", listOf("Questie")),
         settings = "Questie settings")
 
-    /** Official Forever release, with its embedded ForeverCore and all upstream notices. Settings: /path in game. */
-    val SHORTEST_PATH = Addon(
-        id = "shortestpath", title = "Shortest Path Forever",
-        what = "Direction arrow and minimap route breadcrumbs for Questie targets; settings: /path",
-        by = "cjber", license = "GPL-3.0-or-later", repo = "cjber/shortest-path-forever", version = "1.45.3",
-        core = Pkg("v1.45.3", "ShortestPathForever-v1.45.3-forever.zip", 20_019_152L,
-            "09a54bb8ed17d4cff74211321202b4c66de180a7e9e53f5713a7ec52ff993ef9", listOf("ShortestPathForever")))
+    /** Official WoWInterface download, not redistributed. Its TOC includes 16001; see upstream 4.4.1 changelog. */
+    val TOMTOM = Addon(
+        id = "tomtom", title = "TomTom",
+        what = "Simple destination arrow for focused Questie objectives; no walking route. Settings: /tomtom",
+        by = "Cladhaire, Ludovicus", license = "All Rights Reserved; official download only", repo = "", version = "v4.4.1-release",
+        core = Pkg("v4.4.1-release", "TomTom-v4.4.1-release.zip", 11_790_690L,
+            "68a93f8dfa4ecd3cafe28b0999b47ee62e65f0096b5e5982e6725ba83c10bffc", listOf("TomTom"),
+            url = "https://cdn.wowinterface.com/downloads/file7032/TomTom-v4.4.1-release.zip?179406251815"))
 
     /**
      * QUESTTRAIL (Krom, MIT; CurseForge project 1725624; Map's "Quest tracking: QuestTrail", the user: "Download it
@@ -161,7 +162,7 @@ object ThirdPartyAddons {
         core = Pkg("1.11.0", "Manners-v1.11.0.zip", 3_654_185L, "20dc080b26687fd2de4a457283fd27f09c1096a6d45df2b41f8d290a1b6a03ef",
             listOf("Manners"), url = "https://mediafilez.forgecdn.net/files/9408/996/Manners-v1.11.0.zip"))
 
-    var ALL: List<Addon> = listOf(SPOKEN, QUESTIE, SHORTEST_PATH, QUESTTRAIL, MANNERS)
+    var ALL: List<Addon> = listOf(SPOKEN, QUESTIE, TOMTOM, QUESTTRAIL, MANNERS)
         internal set                                            // the off-device test swaps in its own
 
     /** "1.5 GB" / "447 MB" */
@@ -201,11 +202,12 @@ object ThirdPartyAddons {
             prefs?.put("questie.migrated", true)
             prefs?.put("questie.replacement1122", true)
         }
-        if (prefs?.get("shortestpath.navigation1123", false) != true) {
-            prefs?.put("shortestpath.core", true)
-            prefs?.put("shortestpath.migrated", true)
-            prefs?.put("shortestpath.navigation1123", true)
+        if (prefs?.get("tomtom.navigation1125", false) != true) {
+            prefs?.put("tomtom.core", true)
+            prefs?.put("tomtom.migrated", true)
+            prefs?.put("tomtom.navigation1125", true)
         }
+        prefs?.put("shortestpath.core", false)
         // test40: Polestar / QuestTrail installed while Map's setting switched them in (no Install of their own then): their Install
         // stands now, so they stay until their Uninstall (once, flagged)
         for (a in ALL) if (!a.base && installed(a, "core") && prefs?.get("${a.id}.migrated", false) != true) {
@@ -547,7 +549,13 @@ object ThirdPartyAddons {
         runCatching { retirePolestar(flavorRoot) }
             .onSuccess { if (it) lines.add("Polestar moved to disabled storage") }
             .onFailure { lines.add("Polestar retirement deferred (${DependencyAddons.reasonOf(it)})") }
+        runCatching { retireShortestPath(flavorRoot) }
+            .onSuccess { if (it) lines.add("Shortest Path Forever moved to disabled storage; SavedVariables kept") }
+            .onFailure { lines.add("Shortest Path retirement deferred (${DependencyAddons.reasonOf(it)})") }
+        val oldNavigationPresent = stateJ.optJSONObject("shortestpath/core")?.optString("in").orEmpty().isNotEmpty() &&
+            File(flavorRoot, "Interface/AddOns/ShortestPathForever").exists()
         for (a in ALL) for ((key, p) in a.pkgs()) {
+            if (a.id == TOMTOM.id && oldNavigationPresent) continue // Never start both installer-managed navigation sources.
             val name = if (key == "core") a.title else "${a.title} ${key.replaceFirstChar { it.uppercase() }}"
             try {
                 val want = wanted(a, key); val inst = installed(a, key)
@@ -616,14 +624,15 @@ object ThirdPartyAddons {
         // Do this on every start, including an already-recorded install; QuestieDB stays independently managed.
         for (a in ALL.filter { startupManaged(it) && coreWanted(it) }) {
             val why = runCatching {
-                val targets = if (a.id == QUESTIE.id) setOf("Questie", "QuestieDB") else setOf("ShortestPathForever")
+                val targets = if (a.id == QUESTIE.id) setOf("Questie", "QuestieDB") else setOf("TomTom")
                 val enabled = LauncherSetup.reenable(File(flavorRoot, "WTF"), DependencyAddons.gameRunning, targets)
                 when {
+                    a.id == TOMTOM.id && oldNavigationPresent -> "old Shortest Path retirement pending; close the game and start again"
                     DependencyAddons.gameRunning() -> "enable check waits until the game is closed"
                     enabled.failed > 0 -> "could not enable in ${enabled.failed} AddOns.txt files; check storage access and start again"
                     !installed(a, "core") -> "download/install pending; check Settings > Add-ons"
                     a.id == QUESTIE.id -> DependencyAddons.questieDbProblem(File(flavorRoot, "Interface/AddOns/QuestieDB"))
-                    else -> shortestPathProblem(File(flavorRoot, "Interface/AddOns/ShortestPathForever"))
+                    else -> tomTomProblem(File(flavorRoot, "Interface/AddOns/TomTom"))
                 }
             }.getOrElse { "dependency check failed: ${DependencyAddons.reasonOf(it)}" }
             putState(a, "core", state(a, "core").put("readyWhy", why ?: ""))
@@ -647,7 +656,7 @@ object ThirdPartyAddons {
             val fs = folders(a, key).ifEmpty { if (startupManaged(a)) pkgOf(a, key)?.folders.orEmpty() else emptyList() }
             val gone = fs.filter { DependencyAddons.installedVersion(File(addons, it)) == null ||
                 (a.id == QUESTIE.id && it == "Questie" && !questieForever(File(addons, it))) ||
-                (a.id == SHORTEST_PATH.id && shortestPathProblem(File(addons, it)) != null) }
+                (a.id == TOMTOM.id && tomTomProblem(File(addons, it)) != null) }
             if (fs.isEmpty() || gone.isEmpty()) continue
             putState(a, key, JSONObject())
             log("add-ons: ${a.id}-$key: ${gone.joinToString()} missing from AddOns: installed again")
@@ -657,14 +666,13 @@ object ThirdPartyAddons {
     /** not a failure of the package: it goes in at the next start (the game started meanwhile, not enough room) */
     private class Later(msg: String) : IOException(msg)
 
-    private fun startupManaged(a: Addon): Boolean = a.id == QUESTIE.id || a.id == SHORTEST_PATH.id
+    private fun startupManaged(a: Addon): Boolean = a.id == QUESTIE.id || a.id == TOMTOM.id
 
-    /** The Forever TOC and its load list include the embedded core; optional add-ons remain optional. */
-    internal fun shortestPathProblem(dir: File): String? {
-        val toc = File(dir, "ShortestPathForever.toc")
-        if (DependencyAddons.tocField(toc, "Interface") != "16001" ||
-            DependencyAddons.tocField(toc, "Version") != SHORTEST_PATH.version ||
-            DependencyAddons.tocField(toc, "X-Forever-Core") != "v1.17.1") return "the pinned Forever TOC is missing or incompatible"
+    /** Accept only the pinned official package with Forever support and a complete load list. */
+    internal fun tomTomProblem(dir: File): String? {
+        val toc = File(dir, "TomTom.toc")
+        if (DependencyAddons.tocField(toc, "Interface")?.split(',')?.map { it.trim() }?.contains("16001") != true ||
+            DependencyAddons.tocField(toc, "Version") != TOMTOM.version) return "the pinned Forever TOC is missing or incompatible"
         val missing = toc.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
             .firstOrNull { !File(dir, it.replace('\\', '/')).isFile }
         return missing?.let { "missing load file: $it" }
@@ -732,7 +740,7 @@ object ThirdPartyAddons {
         // (review, 2026-11-11) and still whole: every folder the package brings is there with its .toc
         val staged = runCatching { mark.readText() }.getOrNull() == sig(p) &&
             p.folders.all { DependencyAddons.installedVersion(File(staging, it)) != null } &&
-            (a.id != SHORTEST_PATH.id || shortestPathProblem(File(staging, "ShortestPathForever")) == null)
+            (a.id != TOMTOM.id || tomTomProblem(File(staging, "TomTom")) == null)
         // #556: an unpack the app's close cut short goes on where it stopped (what it already wrote needs no room again)
         val resume = !staged && unpackCutShort(staging, p)
         val have = if (resume) runCatching { staging.walkBottomUp().filter { it.isFile }.sumOf { it.length() } }.getOrDefault(0L) else 0L
@@ -751,7 +759,11 @@ object ThirdPartyAddons {
                 setLive(a, key, Status(Kind.DOWNLOADING, installRowLine(0), 0))
                 val pct0 = intArrayOf(-1)
                 val written = DependencyAddons.unpackResume(zipOf(p), staging, "", maxFiles = 40_000,
-                    maxBytes = if (a.id == QUESTIE.id) 256L * 1024 * 1024 else p.bytes * 3 / 2 + 50_000_000,
+                    maxBytes = when (a.id) {
+                        QUESTIE.id -> 256L * 1024 * 1024
+                        TOMTOM.id -> 72L * 1024 * 1024 // Pinned archive expands to 67,991,471 bytes (upstream TGA artwork).
+                        else -> p.bytes * 3 / 2 + 50_000_000
+                    },
                     progress = { pct ->
                         progress?.invoke(pct)
                         if (pct != pct0[0]) { pct0[0] = pct; setLive(a, key, Status(Kind.DOWNLOADING, installRowLine(pct), pct)) }
@@ -759,8 +771,8 @@ object ThirdPartyAddons {
                 if (resume) log("add-ons: ${a.id}-$key: the unpack went on: $written files written now")
                 keepNotices(staging)
                 if (a.id == QUESTIE.id) require(questieForever(File(staging, "Questie"))) { "Questie needs the Forever contract-4 package" }
-                if (a.id == SHORTEST_PATH.id) require(shortestPathProblem(File(staging, "ShortestPathForever")) == null) {
-                    "Shortest Path Forever needs its pinned Forever package and embedded core"
+                if (a.id == TOMTOM.id) require(tomTomProblem(File(staging, "TomTom")) == null) {
+                    "TomTom needs its pinned Forever-compatible package"
                 }
                 mark.writeText(sig(p))
                 File(staging, UNPACKING).delete()                          // after the mark: never a moment with neither
@@ -820,6 +832,26 @@ object ThirdPartyAddons {
         putState(a, key, JSONObject())
         // a module goes out with its core
         if (key == "core") for (m in a.modules) if (installed(a, m.id)) moveOut(a, m.id, flavorRoot)
+    }
+
+    /** Only the installer-recorded SPF folder. Unpruned disabled storage; never WTF or user add-ons. */
+    internal fun retireShortestPath(flavorRoot: File): Boolean {
+        val recorded = stateJ.optJSONObject("shortestpath/core") ?: return false
+        if (recorded.optString("in").isEmpty()) return false
+        val addons = File(flavorRoot, "Interface/AddOns")
+        val source = File(addons, "ShortestPathForever")
+        if (!source.exists()) return false
+        if (DependencyAddons.gameRunning()) throw Later("the game is running")
+        require(source.canonicalFile.parentFile == addons.canonicalFile &&
+            !java.nio.file.Files.isSymbolicLink(source.toPath())) { "linked ShortestPathForever folder" }
+        val disabled = File(flavorRoot, "Interface/AddOns-disabled-dsforever").apply { mkdirs() }
+        require(!java.nio.file.Files.isSymbolicLink(disabled.toPath()) &&
+            disabled.canonicalFile.parentFile == File(flavorRoot, "Interface").canonicalFile) { "linked disabled storage" }
+        var target = File(disabled, "ShortestPathForever")
+        var n = 2
+        while (target.exists()) target = File(disabled, "ShortestPathForever~${n++}")
+        moveDir(source, target, "ShortestPathForever could not be moved to disabled storage")
+        return true
     }
 
     /** Retire the two named Polestar add-ons even in a copied game folder, plus recorded package folders.

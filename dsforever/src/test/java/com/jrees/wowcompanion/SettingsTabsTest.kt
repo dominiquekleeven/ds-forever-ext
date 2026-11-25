@@ -97,7 +97,7 @@ class SettingsTabsTest {
                 "Spell wheel: pick", "Left class radial: open", "Left class radial: pick", "Right class radial: open", "Right class radial: pick"),
             G.SMART_Y to listOf("Smart Y"),
             G.COMBAT to listOf("Party mode", "Smart Res", "Start attack on hostile target", "Start the attack when a spell is cast", "Combat Auto Shot"),
-            G.CARDS to ThirdPartyAddons.POLESTAR.rowWords() + ThirdPartyAddons.QUESTIE.rowWords() + ThirdPartyAddons.SHORTEST_PATH.rowWords() +
+            G.CARDS to ThirdPartyAddons.POLESTAR.rowWords() + ThirdPartyAddons.QUESTIE.rowWords() + ThirdPartyAddons.TOMTOM.rowWords() +
                 "Quest tracking" + ThirdPartyAddons.SPOKEN.rowWords() +
                 ThirdPartyAddons.MANNERS.rowWords() + ThirdPartyAddons.QUESTTRAIL.rowWords(),
             G.VOICE to listOf("Voice: English · 60 MB", "Voice: English · 148 MB", "Voice: other languages · 60 MB", "Voice: other languages · 148 MB"),
@@ -138,7 +138,7 @@ class SettingsTabsTest {
             "DS party frames", "Party frames", "Cast bar", "Enemy nameplates", "Game tooltips", "Minimap zoom outdoors", "Minimap zoom indoors",
             "Quest tracking", "World map", "Message input") +
             ThirdPartyAddons.SPOKEN.rowWords() + ThirdPartyAddons.POLESTAR.rowWords() + ThirdPartyAddons.QUESTIE.rowWords() + ThirdPartyAddons.QUESTTRAIL.rowWords() +
-            ThirdPartyAddons.MANNERS.rowWords() + ThirdPartyAddons.SHORTEST_PATH.rowWords() +
+            ThirdPartyAddons.MANNERS.rowWords() + ThirdPartyAddons.TOMTOM.rowWords() +
             listOf("Frame limit", "Lossless.dll", "Frame generation", "Multiplier", "Flow scale", "Performance mode", "Restart the game",
                 "Build in the background", "Progress", "Route data", "Language", "Reload game UI", "Battle.net login", "Problem report",
                 "Lighter mode", "Low-memory graphics", "Home map: full detail", "Map style when zoomed out", "Stream settings", "Status") +
@@ -261,7 +261,7 @@ class SettingsTabsTest {
 
     /** 1.0.9 Add-ons: every third-party add-on has its group there, its rows its own (title, modules, options) */
     @Test fun addOnsHaveTheirOwnGroups() {
-        val cards = listOf(B.ADDON_QUESTIE, B.ADDON_SHORTEST_PATH, B.ADDON_SPOKEN, B.ADDON_MANNERS)
+        val cards = listOf(B.ADDON_QUESTIE, B.ADDON_TOMTOM, B.ADDON_SPOKEN, B.ADDON_MANNERS)
         val shown = listOf(B.IMPORT) +                         // "a single button at the top of the list" (2026-11-16)
             cards +                                            // the picture cards (the beautify pass, 2026-11-17)
             B.IMPORTED                                         // the player's own imports (2026-11-16), last

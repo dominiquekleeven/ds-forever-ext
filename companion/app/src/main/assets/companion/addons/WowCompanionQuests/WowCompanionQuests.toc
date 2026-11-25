@@ -5,9 +5,9 @@
 ## Group: WowCompanion
 ## Notes: Feeds the Quests room on the Thor's bottom screen
 ## Author: DS Forever
-## Version: Set 426
+## Version: Set 427
 ## DefaultState: enabled
 ## Dependencies: WowCompanion
-## OptionalDeps: QuestieDB
+## OptionalDeps: QuestieDB, Questie, TomTom
 Quests.lua
 Tracker.lua

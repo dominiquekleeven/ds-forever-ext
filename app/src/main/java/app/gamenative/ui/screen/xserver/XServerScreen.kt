@@ -798,18 +798,6 @@ fun XServerScreen(
         performanceHudView = null
     }
 
-    fun togglePerformanceHudLayout() {
-        val hud = performanceHudView ?: return
-        val compactMode = !hud.isCompactMode()
-        hud.setCompactMode(compactMode)
-        PrefManager.performanceHudCompactMode = compactMode
-        hud.post {
-            if (performanceHudView === hud && !isDraggingPerformanceHud) {
-                restorePerformanceHudPosition()
-            }
-        }
-    }
-
     fun updatePerformanceHud(show: Boolean) {
         if (!show) {
             removePerformanceHud()
@@ -830,7 +818,6 @@ fun XServerScreen(
                     com.jrees.wowcompanion.GameFps.read(android.os.SystemClock.elapsedRealtime()) else null
             },
             initialConfig = performanceHudConfig,
-            initialCompactMode = PrefManager.performanceHudCompactMode,
         )
         val layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -1817,7 +1804,6 @@ fun XServerScreen(
                                     movePerformanceHud(event.rawX, event.rawY, save = true)
                                 } else {
                                     hud.performClick()
-                                    togglePerformanceHudLayout()
                                 }
                                 isTrackingPerformanceHudTouch = false
                                 isDraggingPerformanceHud = false

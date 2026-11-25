@@ -182,19 +182,20 @@ class AddonTilesRoomTest {
     // ---------------------------------------------------------------- the tab
 
     @Test fun navigationUsesTheExistingCardAndCanBeRemovedWithoutChangingQuestie() {
-        installed("shortestpath", "questie")
-        ThirdPartyAddons.setCore(ThirdPartyAddons.SHORTEST_PATH, true)
+        installed("tomtom", "questie")
+        ThirdPartyAddons.setCore(ThirdPartyAddons.TOMTOM, true)
         ThirdPartyAddons.setCore(ThirdPartyAddons.QUESTIE, true)
         val r = room()
-        assertTrue(cards(r).cardIds().contains("shortestpath"))
-        open(r, "shortestpath")
-        assertEquals("shortestpath", cards(r).openCard)
+        assertTrue(cards(r).cardIds().contains("tomtom"))
+        assertFalse(cards(r).cardIds().contains("shortestpath"))
+        open(r, "tomtom")
+        assertEquals("tomtom", cards(r).openCard)
         shot(r, "navigation_card")
         val button = bandButtons(r).single()
         tap(cards(r), button); lay(r)
-        assertTrue("first press confirms", ThirdPartyAddons.coreWanted(ThirdPartyAddons.SHORTEST_PATH))
+        assertTrue("first press confirms", ThirdPartyAddons.coreWanted(ThirdPartyAddons.TOMTOM))
         tap(cards(r), bandButtons(r).single()); lay(r)
-        assertFalse(ThirdPartyAddons.coreWanted(ThirdPartyAddons.SHORTEST_PATH))
+        assertFalse(ThirdPartyAddons.coreWanted(ThirdPartyAddons.TOMTOM))
         assertTrue("Questie remains selected", ThirdPartyAddons.coreWanted(ThirdPartyAddons.QUESTIE))
     }
 

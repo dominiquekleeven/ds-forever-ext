@@ -3054,7 +3054,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
                 mapView.invalidate()
             }
             "pnavroute" -> if (current) { mapView.polestar.onRoute(msg, SystemClock.elapsedRealtime()); mapView.invalidate() }
-            "spfroute" -> if (current) {
+            "destination" -> if (current) {
                 val now = SystemClock.elapsedRealtime()
                 mapView.spfRoute.onDoc(msg, now); worldMapRoom.spfRoute.onDoc(msg, now)
                 mapView.invalidate(); worldMapRoom.invalidate()

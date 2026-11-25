@@ -29,8 +29,8 @@ class BottomRouteShotsTest {
     private val app get() = RuntimeEnvironment.getApplication()
     private val gold = MarkerArt.PIN_GOLD
     private val blue = Color.rgb(143, 184, 232)
-    private fun doc() = JSONObject().put("type", "spfroute").put("v", "sr1").put("on", true).put("c", 0).put("leg", 2)
-        .put("p", JSONArray(listOf(500, 1000, 500, 900, 400, 900, 400, 800))).put("n", JSONArray(listOf(500, 900)))
+    private fun doc() = JSONObject().put("type", "destination").put("v", "dst1").put("on", true)
+        .put("c", 0).put("x", 500).put("y", 900)
     private fun map() = JSONObject().put("ok", true).put("mapID", 42).put("zone", "Synthetic route map")
         .put("x", 0.5).put("y", 0.5).put("wx", 500).put("wy", 1000).put("cont", 0).put("facing", 0)
         .put("rect", JSONObject().put("c", 0).put("t", 1000).put("b", 0).put("l", 2000).put("r", 0))
@@ -51,8 +51,8 @@ class BottomRouteShotsTest {
         }
     }
     private fun assertRoute(baseline: Bitmap, active: Bitmap) {
-        assertTrue("gold breadcrumbs/next waypoint", count(active, gold) > count(baseline, gold) + 20)
-        assertTrue("blue forward cue", count(active, blue) > count(baseline, blue) + 3)
+        assertTrue("single gold destination", count(active, gold) > count(baseline, gold) + 20)
+        assertEquals("no second blue navigation arrow", count(baseline, blue), count(active, blue))
     }
 
     @Test fun compactHomeAndExpandedModuleRenderAndExpireWithoutPolestar() {
@@ -88,12 +88,12 @@ class BottomRouteShotsTest {
         assertEquals("a different continent never borrows this route", count(baseline, gold), count(render(v), gold))
         v.updatePos(map())
         assertRoute(baseline, render(v))
-        v.spfRoute.onDoc(JSONObject().put("v", "sr1").put("on", false), SystemClock.elapsedRealtime())
+        v.spfRoute.onDoc(JSONObject().put("v", "dst1").put("on", false), SystemClock.elapsedRealtime())
         assertEquals(count(baseline, gold), count(render(v), gold))
         v.backdropDone(lowMemory = true)
     }
 
-    @Test fun worldAxesZoomRotationClipAndLiveProgressUseRealNativePixels() {
+    @Test fun worldAxesZoomRotationClipAndNoConnectorUseRealNativePixels() {
         val route = SpfRoute().apply { onDoc(doc(), 100) }
         val field = RectF(50f, 50f, 450f, 450f)
         val w = WorldMapModel.World(0, 1000.0, 0.0, 2000.0, 0.0)
@@ -107,8 +107,8 @@ class BottomRouteShotsTest {
                 floatArrayOf(250f + ((w.nx(wy) - 0.5) * 2000 * zoom).toFloat(),
                     250f + ((w.ny(wx) - 0.5) * 1000 * zoom).toFloat())
             }
-            assertTrue(count(b, gold) > 30); assertTrue(count(b, blue) > 3)
-            // No route behind the live 30-yard progress point. Axis and rotation are independently checked.
+            assertTrue(count(b, gold) > 30); assertEquals(0, count(b, blue))
+            // Only a destination. Never a connector from the player's position.
             val oldX = if (angle == 0f) 260 else 250
             val oldY = if (angle == 0f) 250 else 260
             assertEquals("no line back to old start", Color.TRANSPARENT, b.getPixel(oldX, oldY))

@@ -4487,6 +4487,8 @@ class MapView(context: Context) : View(context) {
     }
 
     private fun routeFor(q: Int): CursorRoute.Route? {
+        // Questie + TomTom owns navigation now. Do not run the retired planner as a hidden fallback.
+        if (!Settings.ROUTE_MODES_ON) return null
         questTrailRoute(q)?.let { return it }               // QuestTrail's arrow, live: never cached
         val m = map ?: return null
         val key = listOf(System.identityHashCode(m), System.identityHashCode(questById[q]), routeEpoch,
@@ -7775,7 +7777,6 @@ class MapView(context: Context) : View(context) {
                 val field = RectF(left, top + (if (compact) compactTop() else 0f), left + fw,
                     top + fh - (if (hintsOn() && !compact) HINT_BAND else 0f))
                 spfPaint.draw(c, walk, field, spfNow) { wx, wy -> floatArrayOf(sx(r.nx(wy)), sy(r.ny(wx))) }
-                postInvalidateOnAnimation()
             }
         }
         if (!spfOn && !morphOn && !corpseKnown() && !px.isNaN() && !py.isNaN() && Settings.questTracking == "questtrail") {
