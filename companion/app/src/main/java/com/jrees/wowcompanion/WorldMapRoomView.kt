@@ -778,6 +778,7 @@ class WorldMapRoomView(context: Context) : View(context) {
     private var playerMap = 0
     private var px = Float.NaN; private var py = Float.NaN; private var facing = Float.NaN
     private val questLog = ArrayList<JSONObject>()
+    private val questieMarks = HashMap<Int, List<Mark>>()
     private var docFocus = 0                       // the game's focus, as its quests document says
     /** the focus as SHOWN: the room's own pending focus at once, until the game's document says so or the wait runs out */
     private val focusQid: Int get() = focusPending?.takeIf { System.currentTimeMillis() - it.second < OPTIMISTIC_MS }?.first ?: docFocus
@@ -787,6 +788,7 @@ class WorldMapRoomView(context: Context) : View(context) {
     private var padDoc: JSONObject? = null
     private var qdbPins: QdbPins.Pins? = null
     private var qdbNodes: QdbPins.Nodes? = null
+    private var qdbAvail: QdbPins.Avail? = null
     val spfRoute = SpfRoute()
     private val spfPaint = SpfRoutePaint()
 
@@ -903,6 +905,7 @@ class WorldMapRoomView(context: Context) : View(context) {
         if (focusPending?.first == docFocus) focusPending = null      // the game says what the room showed: done
         questLog.clear()
         q.optJSONArray("list")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let { questLog.add(it) } }
+        rebuildQuestieMarks()
         // a pending track / untrack the game's document now shows is done
         trackPending.entries.removeAll { (id, p) -> logEntry(id)?.let { docTracked(it) == p.tracked } ?: true }
         if (region == MapRoomKeys.Region.LIST && selQuest != 0) {
@@ -1009,6 +1012,14 @@ class WorldMapRoomView(context: Context) : View(context) {
     }
     private val zoneQuests = HashMap<Int, List<Mark>>()
     fun onQdbPins(d: JSONObject) { QdbPins.pins(d)?.let { qdbPins = it; if (isShown) invalidate() } }
+
+    fun onQdbAvail(d: JSONObject) {
+        QdbPins.avail(d)?.let { qdbAvail = it; if (isShown) invalidate() }
+    }
+
+    fun onQdbAreas(d: JSONObject) {
+        QdbAreas.parse(d)?.let { QdbAreas.remember(it); if (isShown) invalidate() }
+    }
 
     /** the map's options to the add-on (Map.lua mp3: Sparkles; the pin lane's op digit 2, then the bits); Home's map keeps them */
     fun sendProbeOptions(bits: Int): Boolean = TapBridge.tapsSpaced(context, padDoc, MapRoomPad.optCells(bits), MapRoomPad.GAP_MS)
@@ -1589,23 +1600,43 @@ class WorldMapRoomView(context: Context) : View(context) {
 
     /** the quest markers of the shown map: the player's own map from the live map document, any other from Map.lua's mapquests */
     private fun marks(): List<Mark> = marksOf(shown)
+    private fun rebuildQuestieMarks() {
+        questieMarks.clear()
+        val maps = HashSet<Int>()
+        for (q in questLog) q.optJSONObject("qdb")?.let { db ->
+            for (key in listOf("obj", "turnin")) db.optJSONArray(key)?.let { pts ->
+                for (i in 0 until pts.length()) pts.optJSONObject(i)?.optInt("m", 0)?.takeIf { it > 0 }?.let { maps.add(it) }
+            }
+        }
+        for (id in maps) {
+            val frame = JSONObject().put("mapID", id)
+            if (id == playerMap) mapDoc?.let { m ->
+                frame.put("x", m.optDouble("x", Double.NaN)); frame.put("y", m.optDouble("y", Double.NaN))
+            }
+            questieMarks[id] = QdbSpots.derive(frame, questLog, 1.5, 1.0).filter { it.lead }
+                .map { Mark(it.qid, it.x.toFloat(), it.y.toFloat(), it.turnIn) }
+        }
+    }
     /** map [id]'s quest markers (its own 0..1) */
     private fun marksOf(id: Int): List<Mark> {
         val m = mapDoc
+        val out = ArrayList<Mark>()
         if (id == playerMap && m != null) {
-            val a = m.optJSONArray("quests") ?: return emptyList()
-            val out = ArrayList<Mark>()
-            for (i in 0 until a.length()) {
-                val q = a.optJSONObject(i) ?: continue
+            val a = m.optJSONArray("quests")
+            for (i in 0 until (a?.length() ?: 0)) {
+                val q = a?.optJSONObject(i) ?: continue
                 val done = q.optBoolean("done", false)
                 var x = q.optDouble(if (done && q.has("tx")) "tx" else "x", Double.NaN).toFloat()
                 var y = q.optDouble(if (done && q.has("ty")) "ty" else "y", Double.NaN).toFloat()
                 if (x.isNaN() || y.isNaN()) { x = q.optDouble("x", Double.NaN).toFloat(); y = q.optDouble("y", Double.NaN).toFloat() }
                 if (!x.isNaN() && !y.isNaN()) out.add(Mark(q.optInt("questID", 0), x, y, done, q.optString("title", "").ifEmpty { null }))
             }
-            return out.filter { it.id != 0 }
-        }
-        return zoneQuests[id] ?: emptyList()
+        } else out.addAll(zoneQuests[id] ?: emptyList())
+        out.removeAll { it.id == 0 }
+        // Native points win. Questie fallback stays in the map frame carried by each exported spot.
+        val placed = out.map { it.id }.toHashSet()
+        for (s in questieMarks[id] ?: emptyList()) if (s.id !in placed) out.add(s)
+        return out
     }
 
     // ---------------------------------------------------------------- Show: (the extras off to start; the game's marks on)
@@ -1764,6 +1795,7 @@ class WorldMapRoomView(context: Context) : View(context) {
         drawLayerQuests(c)                  // the other layers' discs and counts
         drawCursor(c)                       // over the art and the objective areas, under every marker (the user: "under that numbered circle")
         if (on("quests")) {
+            drawAvailable(c)
             val fadeA = layOf(shown)?.shown ?: 1f
             val order = mapOrder()
             // THE HOVERED MARKER IS LIT (the user after b101: "I would rather the cursor sort of just highlight the selectable thing"): a
@@ -1949,8 +1981,7 @@ class WorldMapRoomView(context: Context) : View(context) {
         if (on("guess")) mapDoc?.let { m ->
             val tracked = questLog.filter { it.has("watch") && !it.isNull("watch") }
             for (s in QdbSpots.derive(m, tracked, 1.5, 1.0)) {
-                if (s.turnIn) UiKit.questDisc(c, sx(s.x.toFloat()), sy(s.y.toFloat()), 46f, UiKit.Quest.TURN_IN, ghost = true)
-                else UiKit.ghostDot(c, sx(s.x.toFloat()), sy(s.y.toFloat()), 18f)
+                if (!s.turnIn && !s.lead) UiKit.ghostDot(c, sx(s.x.toFloat()), sy(s.y.toFloat()), 18f)
             }
         }
     }
@@ -1981,9 +2012,54 @@ class WorldMapRoomView(context: Context) : View(context) {
     // an untracked quest's objective (in the log, not tracked, not ready) is a full-size grey disc with no number, still hovered and
     // picked as before; Home's filter "Untracked quest objectives" (QuestLayers OTHER, the same saved switch) hides it here too
     private val layerPrefs by lazy { context.getSharedPreferences("mapfilters", Context.MODE_PRIVATE) }
+    private fun questLayer(l: QuestLayers.Layer): Boolean = layerPrefs.getBoolean(l.key, l.default)
+
+    private val pAvailable = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val dailyTint = ColorMatrixColorFilter(ColorMatrix(floatArrayOf(
+        0f, 0f, 1f, 0f, 0f, 0f, 0.77f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)))
+    private fun drawAvailable(c: Canvas) {
+        val qs = availableMarks(shown)
+        if (qs.isEmpty()) return
+        val sheet = bmpFile("quest-icons", ArtHarvest.file("ui/poi_icons.png")) ?: return
+        val cell = sheet.height
+        srcR.set(18 * cell, 0, 19 * cell, cell) // The same available-quest cell as Home's map.
+        val done = marks().filter { it.done }
+        for (q in qs) {
+            val x = sx(q.x.toFloat()); val y = sy(q.y.toFloat())
+            if (questLayer(QuestLayers.Layer.TURN_INS) && done.any { kotlin.math.hypot(sx(it.x) - x, sy(it.y) - y) <= 20f }) continue
+            dst.set(x - 20f, y - 20f, x + 20f, y + 20f)
+            pAvailable.colorFilter = if (q.f and QdbPins.AV_REPEAT != 0) dailyTint else null
+            pAvailable.alpha = if (q.f and QdbPins.AV_TRIVIAL != 0) 140 else 255
+            c.drawBitmap(sheet, srcR, dst, pAvailable)
+        }
+    }
+
+    /** Available lists describe the player's map only; never project one onto a browsed neighbour. */
+    private fun availableMarks(id: Int): List<QdbPins.AvailQ> {
+        val a = qdbAvail?.takeIf { it.m == id && id == playerMap } ?: return emptyList()
+        val active = questLog.map { it.optInt("id") }.toHashSet()
+        mapDoc?.optJSONObject("me")?.let { me ->
+            for (key in listOf("on", "done")) me.optJSONArray(key)?.let { ids ->
+                for (i in 0 until ids.length()) active.add(ids.optInt(i))
+            }
+        }
+        val byGiver = LinkedHashMap<Long, QdbPins.AvailQ>()
+        for (q in a.q) {
+            if (q.id in active || !QdbPins.availShows(q.f, questLayer(QuestLayers.Layer.LOW), false, false)) continue
+            if (!questLayer(if (q.f and QdbPins.AV_REPEAT != 0) QuestLayers.Layer.DAILY else QuestLayers.Layer.AVAILABLE)) continue
+            val key = if (q.giver == 0) q.id.toLong() shl 32 else if (q.obj) -q.giver.toLong() else q.giver.toLong()
+            fun rank(v: QdbPins.AvailQ) = if (v.f and QdbPins.AV_TRIVIAL != 0) 1 else if (v.f and QdbPins.AV_REPEAT != 0) 2 else 3
+            val old = byGiver[key]
+            if (old == null || rank(q) > rank(old)) byGiver[key] = q
+        }
+        return byGiver.values.toList()
+    }
     private fun untrackedObj(m: Mark): Boolean = !m.done && logEntry(m.id)?.let { !trackedQ(it) } == true
-    private fun markShown(m: Mark): Boolean = !untrackedObj(m) ||
-        runCatching { layerPrefs.getBoolean(QuestLayers.Layer.OTHER.key, QuestLayers.Layer.OTHER.default) }.getOrDefault(true)
+    private fun markShown(m: Mark): Boolean = when {
+        m.done -> questLayer(QuestLayers.Layer.TURN_INS)
+        untrackedObj(m) && m.id != focusQid -> questLayer(QuestLayers.Layer.OTHER)
+        else -> questLayer(QuestLayers.Layer.TRACKED)
+    }
     /** the tests: the shown map's untracked quests drawn grey (their ids) */
     fun greyQuests(): List<Int> = marks().filter { markShown(it) && untrackedObj(it) }.map { it.id }
 

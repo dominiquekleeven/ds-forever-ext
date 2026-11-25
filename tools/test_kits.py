@@ -222,6 +222,57 @@ got = rowsOf(L.eval('WowCompanion._kit.list()'))
 check(got == [('inv', 5), ('inv', 10), ('bag', 2)], "... and right after the Bags room's X on it: gear only", got)
 L.execute('NOW = NOW + 30')
 
+# bags-kit6 (issue 368): trade goods stay for the whole crate pick; kits remain gear only.
+L.execute(r'''
+NAMES[21001] = "Waylaid Supplies"; CLS[21001] = { 15, 0 }; BAG[0][5] = 21001
+NAMES[2840] = "Copper Bar"; CLS[2840] = { 7, 7 }; BAG[0][6] = 2840
+NAMES[2589] = "Linen Cloth"; CLS[2589] = { 7, 5 }; BAG[0][7] = 2589
+NAMES[5050] = "Quest Thing"; CLS[5050] = { 12, 0 }; BAG[0][8] = 5050
+C_Container.GetContainerNumSlots = function(b) return b == 0 and 8 or 0 end; WowCompanion._bagsLayout = { { bag = 0, slots = 8 } }
+''')
+L.execute('WowCompanion._kit.used(0, 5)')
+lst = L.eval('WowCompanion._kit.list()')
+got = rowsOf(lst)
+check(('bag', 6) in got and ('bag', 7) in got and ('bag', 8) in got,
+      "issue 368: right after a crate's use: trade goods and quest item listed", got)
+check(('bag', 5) not in got, "issue 368: the crate itself is not offered", got)
+check(('bag', 3) in got and ('bag', 4) in got, "issue 368: consumables listed too", got)
+check(got[-3:] == [('inv', 5), ('inv', 10), ('bag', 2)], "issue 368: gear after them, as before", got)
+check(all(lst[i + 1].ok is True for i in range(len(lst))), "issue 368: rows usable; the game validates the click")
+L.execute('WowCompanion._kit.used(0, 1)')
+got = rowsOf(L.eval('WowCompanion._kit.list()'))
+check(got == [('inv', 5), ('inv', 10), ('bag', 2)], "issue 368: a kit's use still lists gear only", got)
+L.execute('NOW = NOW + 30')
+got = rowsOf(L.eval('WowCompanion._kit.list()'))
+check(('bag', 6) not in got, "issue 368: no recent crate use: ordinary spell list", got)
+L.execute('KEPTKIT = WowCompanion._kit.pickKit; PICKING = false')
+step()
+L.execute('WowCompanion._kit.used(0, 5); PICKING = true')
+step()
+check(L.eval('WowCompanion._kitLearned[21001]') is True and L.eval('WowCompanion._kit.pickKit') == 21001,
+      "bags-kit6: the crate is learned and kept as this pick's item")
+got = rowsOf(L.eval('WowCompanion._kit.list()'))
+check(('bag', 6) in got and ('bag', 7) in got and ('bag', 8) in got and ('bag', 5) not in got,
+      "bags-kit6: learned crate still lists trade goods, not itself", got)
+L.execute('NOW = NOW + 5')
+got = rowsOf(L.eval('WowCompanion._kit.list()'))
+check(('bag', 6) in got and ('bag', 7) in got and ('bag', 8) in got,
+      "bags-kit6: trade goods remain five seconds into the pick", got)
+check(got.count(('bag', 3)) == 1 and got.count(('bag', 4)) == 1 and got[-3:] == [('inv', 5), ('inv', 10), ('bag', 2)],
+      "bags-kit6: consumables once, gear after them", got)
+L.execute('PICKING = false')
+step()
+check(L.eval('WowCompanion._kit.pickKit') is None, "bags-kit6: no crate kept after the pick")
+L.execute('PICKING = true; WowCompanion._kit.was = true; WowCompanion._kit.pickKit = KEPTKIT; WowCompanion._kitLearned[21001] = nil')
+L.execute('WowCompanion._kit.used(0, 1)')
+got = rowsOf(L.eval('WowCompanion._kit.list()'))
+check(got == [('inv', 5), ('inv', 10), ('bag', 2)], "bags-kit6: armor kit again remains gear only", got)
+L.execute('NOW = NOW + 30')
+L.execute(r'''
+for k = 5, 8 do BAG[0][k] = nil end
+C_Container.GetContainerNumSlots = function(b) return b == 0 and 4 or 0 end; WowCompanion._bagsLayout = { { bag = 0, slots = 4 } }
+''')
+
 # a fight: a FITTING bag item with no free cell stays, greyed; what does not fit is hidden
 L.execute(r'''
 COMBAT0 = InCombatLockdown; function InCombatLockdown() return true end

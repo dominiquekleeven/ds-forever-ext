@@ -411,11 +411,14 @@ local qdb = { ok = nil, cache = {} }
 
 local function qdbReady()
     if qdb.ok ~= nil then return qdb.ok end
-    qdb.ok = false
+    -- An optional provider can publish after our first quest snapshot. Retry on the existing heartbeat, not every quest event.
+    local now = GetTime()
+    if qdb.retryAt and now < qdb.retryAt then return false end
+    qdb.retryAt = now + 15
     local L = _G.LibQuestieDB
     if type(L) ~= "table" or type(L.RequireContract) ~= "function" then return false end
     local okC, okR = pcall(L.RequireContract, 1)
-    if not (okC and okR == true) then return false end
+    if not (okC and okR == true) then qdb.ok = false; return false end
     qdb.L = L
     qdb.Q = type(L.QuestDB) == "table" and L.QuestDB or _G.QuestDB
     qdb.N = type(L.NpcDB) == "table" and L.NpcDB or _G.NpcDB
@@ -436,8 +439,9 @@ local function qdbReady()
         if t then for k, v in pairs(t) do if type(k) == "number" and type(v) == "number" then area2map[k] = v end end end
     end
     qdb.area2map = area2map
-    qdb.ok = type(qdb.Q) == "table" and type(qdb.N) == "table" and next(area2map) ~= nil
-    return qdb.ok
+    if type(qdb.Q) ~= "table" or type(qdb.N) ~= "table" or next(area2map) == nil then return false end
+    qdb.ok = true
+    return true
 end
 
 local function qdbCall(db, fn, id)
@@ -740,7 +744,7 @@ WC.questNeedItems = function()
     end
     return out
 end
-WC.questieReset = function() qdb.ok = nil; qdb.cache = {}; for k in pairs(mapSize) do mapSize[k] = nil end end
+WC.questieReset = function() qdb.ok = nil; qdb.retryAt = nil; qdb.cache = {}; for k in pairs(mapSize) do mapSize[k] = nil end end
 
 -- ---------------------------------------------------------------- emission
 
@@ -1701,7 +1705,7 @@ end
 
 local function pinsStart()
     if pins.state then return pins.state end
-    if not qdbReady() then pins.state = "off"; return "off" end
+    if not qdbReady() then return "waiting" end
     pins.state = "indexing"
     -- "set" is unique ACROSS sessions too (q23, Map: its cache outlives a game reload and is keyed by m + set, so a fresh build
     -- numbered from 1 again could be taken for the old one): this session's numbers start at the server's second, so a later
@@ -1723,6 +1727,9 @@ local function pinsStart()
         pins.state = "ready"
         pinsNext()
         availSend()
+        -- The unchanged native snapshot may predate the provider; attach its spots and areas now too.
+        pcall(emitQuests, true)
+        pcall(WC.push)
     end)
     return "indexing"
 end
@@ -1767,6 +1774,7 @@ pcall(function() qf:RegisterEvent("PLAYER_ENTERING_WORLD") end)
 local RIDE = { heartbeat = true, login = true, zone = true, manual = true }
 if type(WC.snapshot) == "function" then
     hooksecurefunc(WC, "snapshot", function(reason)
+        if reason == "heartbeat" then pcall(pinsStart) end
         if RIDE[reason] then emitQuests(true) end
         if reason == "heartbeat" then pcall(pinsBeat); pcall(areasBeat) end   -- q22 / q33: the current map's documents again
         -- Questie can finish loading after PLAYER_LOGIN. Retry only a missing focused goal on the existing 15-second heartbeat.

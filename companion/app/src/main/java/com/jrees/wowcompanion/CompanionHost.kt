@@ -2991,8 +2991,8 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
             // QuestieDB's pins and spawn spots for one map (Quests' q21 pair; Map draws them)
             "qdbpins" -> { mapView.onQdbPins(msg); worldMapRoom.onQdbPins(msg) }
             "qdbnodes" -> { mapView.onQdbNodes(msg); worldMapRoom.onQdbNodes(msg) }
-            "qdbavail" -> mapView.onQdbAvail(msg)            // Map: QuestieDB's available quests, Home's "!" layer (Quests' add-on)
-            "qdbareas" -> mapView.onQdbAreas(msg)            // Map: QuestieDB's objective spawns, Home's quest areas (Quests' add-on)
+            "qdbavail" -> { mapView.onQdbAvail(msg); worldMapRoom.onQdbAvail(msg) }
+            "qdbareas" -> { mapView.onQdbAreas(msg); worldMapRoom.onQdbAreas(msg) }
             "padkeytest" -> TapBridge.onKeyTest(msg, current)  // Quests: L1's handshake + sweep trace (TapPad pad10c)
             // the Map room's painted world map: what this character has explored (Map.lua mapexpl)
             "mapexpl" -> worldMapRoom.onMapExpl(msg)

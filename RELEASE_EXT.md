@@ -3,7 +3,7 @@
 Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an official upstream release.
 
 - Updated to upstream **1.0.38** (`7552e1f3`), with its Home editor, controller situations, sticky character settings, loading/input fixes, HTTPS downloads, and memory improvements. Fork-specific integration notes: [UPSTREAM_1_0_38_EXT.md](UPSTREAM_1_0_38_EXT.md).
-- This is **1.0.38-ext.5**, version code **1525**, signed with the existing Ext key. Install over an earlier Ext build; do not uninstall or clear data. Questie, simple waypoint navigation, GPU driver selections, and independent FPS measurements remain part of this fork. Polestar is not restored.
+- This is **1.0.38-ext.6**, version code **1526**, signed with the existing Ext key. Install over an earlier Ext build; do not uninstall or clear data. Questie, simple waypoint navigation, GPU driver selections, and independent FPS measurements remain part of this fork. Polestar is not restored.
 - On the first start after this update, the default changes to a **30 FPS game cap with Lossless frame generation enabled at 2×**, targeting 60 output FPS. It applies to existing Ext installs as well as new installs. The prior settings are retained privately for recovery. It applies to the next game launch, not by forcibly restarting a running game. Later manual changes persist across launches and future updates.
 - Supply your own licensed **Lossless.dll** if it is not already imported. The DLL is never bundled or downloaded. Without it, frame generation stays inactive and the game keeps the 30 FPS cap. A 60 FPS target is not a promise of measured output; the HUD continues to report actual measurements.
 - Upstream now applies extra low-memory graphics reductions on 12 GB models as well as 8 GB models, and Light 8 automatically on 8 GB devices. This can reduce spell/particle detail. It also enables a video-memory cap and native BC textures on detected Adreno devices. Physical-device results remain unverified for this merged release.
@@ -16,14 +16,22 @@ Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an 
 - Use Questie instead of the Polestar add-on. Questie supplies quest markers and objectives, not Polestar's step-by-step guide.
 - Questie 12.12.0 downloads from its official release during setup. Questie settings open on the game screen, not as a mirrored bottom-screen panel.
 - Ext.6 waits for Questie's initial download, repairs a missing Forever TOC, checks QuestieDB contract compatibility, and enables both add-ons each startup. A verified official DB fallback replaces failed cached checks. Failures say **Questie not ready** instead of implying success. Existing replaced add-ons and AddOns.txt receive recovery backups; SavedVariables remain unchanged.
-### Ext.5 horizontal HUD and waypoint navigation
+### Ext.6 quest markers and selected upstream fixes
+
+- Both bottom map callers now receive Questie available-giver and objective-area exports. The full Map screen draws available givers and uses Questie objective/finisher spots when native points are missing. Saved filters and the Home minimap's proximity rules remain unchanged.
+- A transient early QuestieDB-readiness failure no longer disables exports for the whole session. Recovery uses the existing 15-second heartbeat; invalid contracts remain rejected. Marker changes and map transitions have regression coverage. These defects are verified in tests, but the complete reported Thor symptom still needs an on-device check.
+- Selected bugfixes from stable upstream releases through 1.0.41: crate/supply-box item selection, bounded transient patch-server retries with specific errors, and Java-side frame-generation freeze mitigation. This is not a full 1.0.41 merge. See [backport provenance and limits](UPSTREAM_BUGFIX_BACKPORTS.md).
+- Unchanged frame-generation pushes are skipped. Shader identity checks content as well as its path, so a replaced DLL/cache still reloads. The native prebuilt lock issue is not repaired by this Java mitigation. Your 30 FPS + 2× defaults, independent FPS measurements, Questie/TomTom, horizontal HUD, and driver choices remain unchanged.
+- Installer set 428 updates the bundled fixes on existing installs. Fully close WoW and relaunch through Ext; do not uninstall or clear data.
+
+### Retained Ext.5 horizontal HUD and waypoint navigation
 
 - Performance HUD is now a shallow horizontal strip. It retains the existing metrics, graphs, size, colors, and draggable position. It wraps when the available width is insufficient; tapping no longer switches back to vertical.
 - **TomTom v4.4.1-release replaces Shortest Path Forever.** It downloads unmodified from the official WoWInterface source during setup. Questie and its shared QuestieDB remain unchanged. See [navigation details and pinned source](NAVIGATION_EXT.md).
 - Focusing a quest selects its nearest eligible Questie objective. Quest updates refresh the destination; completion points at the turn-in. The same goal feeds TomTom's arrow, the game's floating waypoint where supported, and a diamond on both bottom maps. No walking-path generation or dotted walking route remains.
 - Missing destinations, loading, and logout clear owned markers. Repeated identical destinations do not requeue. A manual destination pauses following until another explicit focus choice. Use `/wcnav off` or `/wcnav on` to change following; `/tomtom` opens arrow settings. The native floating marker needs a physical-device check.
 - With WoW closed, installer-recorded Shortest Path moves to unique disabled storage without pruning. Its SavedVariables stay intact. An unrecorded manual install is left alone, and the new bridge stands down while it is loaded. Old SPF opt-outs remain on disk but cannot be imported when that retired addon is not loaded; the requested replacement starts enabled.
-- Installer set 427 updates the bundled bridge on existing installs. Close WoW and relaunch through Ext with internet access; do not uninstall or clear data.
+- Close WoW and relaunch through Ext with internet access for the navigation dependency setup; do not uninstall or clear data.
 
 ### Ext.4 add-on efficiency fixes
 

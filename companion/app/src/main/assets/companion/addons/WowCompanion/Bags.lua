@@ -2410,6 +2410,22 @@ function KIT.food()
     for _, r in ipairs(rows) do r.at = nil end
     return rows
 end
+-- bags-kit6 (issue 368): only the item's class or the game's own fits identify a kit.
+-- _kitLearned includes crates too, so it must not turn a crate's pick back into gear only.
+function KIT.isKit(id)
+    local fits = WC._kitFits and WC._kitFits[id]
+    if type(fits) == "table" then for _, r in pairs(fits) do if type(r) == "table" and r.ok == true then return true end end end
+    local okI, _, _, _, _, _, cls, sub = CALL(function() return C_Item.GetItemInfoInstant(id) end)
+    cls, sub = okI and SN(function() return cls end) or nil, okI and SN(function() return sub end) or nil
+    return cls == 8 or (cls == 0 and sub == 6)
+end
+-- Keep the crate for the whole pick: the list is rebuilt on every D-pad move, after the use's 2 s window too.
+function KIT.crate()
+    local id = (KIT.last and GetTime() - KIT.last.t < 2) and KIT.last.id or (KIT.on() and KIT.pickKit) or nil
+    if type(id) == "number" and not KIT.isKit(id) then return id end
+    return nil
+end
+KIT.CRATE_CLS = { [0] = true, [5] = true, [7] = true, [12] = true, [15] = true }
 function KIT.list(ctx)
     ctx = ctx or KIT.ctx() or "spell"
     if ctx == "feed" then
@@ -2422,7 +2438,9 @@ function KIT.list(ctx)
     -- (the player's report, 2026-11-10, issue 90: "feed pet brings up item select, but doesnt show consumables"): a pick a SPELL started
     -- (not an armor kit or stone used from the bags just now) and not an enchant / item-condition pick lists the bags' consumables too,
     -- food and drink first; the game itself says no on the click to anything the spell cannot take
-    if ctx == "spell" and not (KIT.last and GetTime() - KIT.last.t < 2) then
+    -- A crate lists consumables with its trade goods below, never twice.
+    local crate = ctx == "spell" and KIT.crate() or nil
+    if ctx == "spell" and not (KIT.last and GetTime() - KIT.last.t < 2) and not crate then
         local food, other = {}, {}
         for _, e in ipairs(layout()) do
             local n = SN(function() return C_Container.GetContainerNumSlots(e.bag) end) or 0
@@ -2446,6 +2464,29 @@ function KIT.list(ctx)
         for _, r in ipairs(food) do front[#front + 1] = r end
         for _, r in ipairs(other) do front[#front + 1] = r end
         -- (issue #126) the consumables before the worn gear, never past the cap: 10 rows are left for the bags' gear
+        local room = math.max(0, KIT.MAX - #out - 10)
+        for i = math.min(#front, room), 1, -1 do table.insert(out, 1, front[i]) end
+    end
+    -- bags-kit6: a crate's non-gear choices first; a kit keeps the gear-only list. The game validates the actual pick.
+    if crate then
+        local front = {}
+        for _, e in ipairs(layout()) do
+            local n = SN(function() return C_Container.GetContainerNumSlots(e.bag) end) or 0
+            for s = 1, n do
+                local id = bagItemID(e.bag, s)
+                if id and id ~= crate then
+                    local okI, _, _, _, _, _, cls = CALL(function() return C_Item.GetItemInfoInstant(id) end)
+                    cls = okI and SN(function() return cls end) or nil
+                    if cls and KIT.CRATE_CLS[cls] then
+                        local info = infoAt(e.bag, s)
+                        front[#front + 1] = { src = "bag", bag = e.bag, s = s, id = id,
+                            name = S(function() return (C_Item.GetItemNameByID(id)) end) or S(function() return (GetItemInfo(id)) end),
+                            icon = info and SN(function() return info.iconFileID end) or nil,
+                            q = info and SN(function() return info.quality end) or nil, ok = true }
+                    end
+                end
+            end
+        end
         local room = math.max(0, KIT.MAX - #out - 10)
         for i = math.min(#front, room), 1, -1 do table.insert(out, 1, front[i]) end
     end
