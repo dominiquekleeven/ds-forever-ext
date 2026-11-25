@@ -1244,6 +1244,7 @@ local function collectAuction()
                 end
             end
         end
+        AH.itemRows, AH.itemRowsKey = not it.commodity and it.rows or nil, key
         ah.item = it
     end
     if AH.tab == "sell" then ah.sell = AH.sellCollect() end          -- 1.0.9: the Sell tab
@@ -1630,8 +1631,19 @@ local function assignSlots(doc)
             a.sortCtx = ctx
         end
         if au.item then
-            for _, r in ipairs(au.item.rows) do if not au.item.commodity then r.slot = slot("ibuy", "ahrow " .. r.i) end end
-        elseif au.results then
+            if not au.item.commodity then
+                -- Browse fills ibuy; its retired cells rest for 30 s. The fixed quantity cells only ARM a listing.
+                au.item.rowTap = "iqty"
+                for _, r in ipairs(au.item.rows) do
+                    local ok, col = pcall(pad.slotFor, "iqty", "qty " .. r.i)
+                    if ok then r.slot = col end
+                    r.look, r.lookRow = slot("ibuy", "ahres " .. r.i), "ibuy"
+                end
+            end
+        end
+        if au.results then
+            -- The same read-only cells open browse results or look at listings. Keep the pool on Back, even for a short result list.
+            if au.tab == "browse" then for i = 1, AH_ROWS do slot("ibuy", "ahres " .. i) end end
             for _, r in ipairs(au.results) do r.slot = slot("ibuy", "ahres " .. r.i) end
         end
     end
@@ -2226,6 +2238,11 @@ function N.build(doc)
                     first = AH.gridLand(zb) or "ahtab sell"
                 end
             end
+        elseif au.buy and au.buy.kind == "item" and au.buy.armed then
+            sig = "ah|buy|" .. tostring(au.buy.row)
+            local zb = navZone("ahbuyconfirm", 1)
+            navAdd(zb, "ahbuy")
+            N.zones, first = { zb }, "ahbuy"
         elseif au.tab == "owned" and au.cancel then
             -- 1.0.9: a Cancel armed: A on it again cancels (the game's own confirm, its cost), B keeps the auction
             sig = "ah|cancel|" .. tostring(au.cancel.i)
@@ -2841,7 +2858,7 @@ local ON = {
         if MAIL.status == "sending" then MAIL.status, MAIL.confirmAt = "confirm", TN(function() return GetTime() end) end
     end,
     AUCTION_HOUSE_SHOW = function()
-        N.ahTipN = nil
+        N.ahTipN, N.ahTipState = nil, nil
         AH.path, AH.results, AH.key, AH.buy, AH.tab = {}, nil, nil, nil, "browse"
         AH.sell, AH.cancel, AH.fav, AH.pick, AH.favWait = nil, nil, nil, nil, nil
         pcall(AH.hookWarn)
@@ -2937,7 +2954,7 @@ local ON = {
 -- GET_ITEM_INFO_RECEIVED fires constantly all over the game, so this gate matters.
 local REFRESH = {
     "GOSSIP_OPTIONS_REFRESHED", "ITEM_TEXT_READY", "QUEST_ITEM_UPDATE", "MERCHANT_UPDATE", "BAG_UPDATE_DELAYED",
-    "UPDATE_INVENTORY_DURABILITY", "PLAYER_MONEY", "GET_ITEM_INFO_RECEIVED",
+    "UPDATE_INVENTORY_DURABILITY", "PLAYER_MONEY", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT",
     "PLAYER_INTERACTION_MANAGER_FRAME_HIDE", "TRAINER_UPDATE", "PET_STABLE_UPDATE", "MAIL_INBOX_UPDATE",
     -- i170: what else changes an open trainer's list: the game's selection, a service's name arriving late, the pet's points, a
     -- spell the pet (or the player) just learned
@@ -2958,6 +2975,10 @@ local OPENS = {
 
 local f = CreateFrame("Frame")
 f:SetScript("OnEvent", function(_, event, ...)
+    if event == "ITEM_DATA_LOAD_RESULT" then
+        if N.ahTipLoaded and N.ahTipLoaded(...) then emitSoon() end
+        return
+    end
     N.busy = nil                -- the game answered: a press-wait ends (see navRun)
     local h = ON[event]
     if h then
@@ -4354,11 +4375,13 @@ local function lookSource(key)
     elseif w[1] == "train" and a then
         local j = TRN.resolve(a, w[3]) or a           -- i170: the service by its identity, wherever the list moved it
         return nil, function() return C_TooltipInfo.GetTrainerService(j) end
-    elseif w[1] == "ahrow" and a and AH.key and N.ahRowLink(a) then
+    elseif w[1] == "ahrow" and a and AH.key then
         -- i167 (the user 2026-11-19: "When looking at Items on the AH I cant see their stats in any way for some of them"): an item's
         -- listing is ITS OWN item (its suffix, its level, its stats): the game's buy list shows the row's own link, so do we
-        local link = N.ahRowLink(a)
-        return TN(function() return (C_Item.GetItemInfoInstant(link)) end), function() return C_TooltipInfo.GetHyperlink(link) end
+        local link, auction = N.ahRowLink(a)
+        local id = link and tonumber(link:match("item:(%d+)")) or TN(function() return AH.key.itemID end)
+        return id, function() if link then return C_TooltipInfo.GetHyperlink(link) end end,
+            tostring(auction) .. "|" .. (link or "missing listing link"), auction
     elseif (w[1] == "ahres" and a) or w[1] == "ahrow" or w[1] == "ahbuy" then
         -- THE AUCTION HOUSE's tooltips (user, 2026-09-30: "we need tool tips in the ah"): a result, or the item opened
         -- (its listings / its price tiers); the game's own item tooltip by its item key
@@ -4369,10 +4392,11 @@ local function lookSource(key)
         local lvl, suf = TN(function() return key.itemLevel end), TN(function() return key.itemSuffix end)
         -- i167: as the game's own browse list (GameTooltip:SetItemKey(id, level, suffix, required level)); a pet cage by its item
         local req = TN(function() return C_AuctionHouse.GetItemKeyRequiredLevel(key) end)
+        local info = ahKeyInfo(key)
         return id, function()
             if C_TooltipInfo.GetItemKey then return C_TooltipInfo.GetItemKey(id, lvl or 0, suf or 0, req) end
             return C_TooltipInfo.GetItemByID(id)
-        end
+        end, table.concat({ id, lvl or 0, suf or 0, req or 0 }, ":"), nil, info and TB(function() return info.isCommodity end)
     elseif w[1] == "loot" and a then
         local link = TS(function() return GetLootSlotLink(a) end)
         local id = link and TN(function() return (C_Item.GetItemInfoInstant(link)) end)
@@ -4398,21 +4422,33 @@ local function canLook(key) return select(2, lookSource(key)) ~= nil end
 function N.ahRowLink(i)
     local ok, r = CALL(function() return C_AuctionHouse.GetItemSearchResultInfo(AH.key, i) end)
     local link = ok and type(r) == "table" and TS(function() return r.itemLink end)
-    if link and link:find("|H") then return link end
+    local auction = ok and type(r) == "table" and TN(function() return r.auctionID end)
+    if link and (link:find("|H") or link:match("^item:[%-%d:]+$")) then return link, auction end
+    return nil, auction
 end
 -- i167: an auction tooltip read before the client has the item's data comes back empty (or a name alone) and nothing asked again:
 -- ask the game for the item (C_Item.RequestLoadItemDataByID) and look again shortly, a few times per key at most
 N.AH_TIP_TRIES = 8
-function N.ahTipRetry(key, id)
-    N.ahTipN = N.ahTipN or {}
-    local n = N.ahTipN[key] or 0
-    if n >= N.AH_TIP_TRIES then return end
-    N.ahTipN[key] = n + 1
-    if id then CALL(function() C_Item.RequestLoadItemDataByID(id) end) end
-    if N.ahTipWait then return end
-    N.ahTipWait = true
-    local ok = pcall(function() C_Timer.After(0.4, function() N.ahTipWait = nil; if isOpen("auction") then emitSoon() end end) end)
-    if not ok then N.ahTipWait = nil end
+function N.ahTipRetry(key, id, source)
+    local s = N.ahTipState
+    if not s then s = { key = key, id = id, source = source, n = 0 }; N.ahTipState = s end
+    if s.failed or s.n >= N.AH_TIP_TRIES then return false end
+    if s.waiting then return true end
+    s.n, s.waiting = s.n + 1, true
+    if id and not s.requested then s.requested = true; CALL(function() C_Item.RequestLoadItemDataByID(id) end) end
+    local ok = pcall(function() C_Timer.After(0.4, function()
+        if N.ahTipState ~= s then return end
+        s.waiting, s.tip = nil, nil
+        if isOpen("auction") then emitSoon() end
+    end) end)
+    if not ok then s.waiting = nil end
+    return true
+end
+function N.ahTipLoaded(id, success)
+    local s = N.ahTipState
+    if not (s and s.id == id and isOpen("auction")) then return false end
+    s.waiting, s.tip, s.failed = nil, nil, success == false
+    return true
 end
 N.canLook = canLook
 local function questItemID(kind, i)
@@ -4422,15 +4458,31 @@ end
 function N.tipOf(key, opt)
     if type(key) ~= "string" or not C_TooltipInfo then return nil end
     local noWorn = type(opt) == "table" and opt.nw == true
-    local id, fn = lookSource(key)
+    local id, fn, source, auction, commodity = lookSource(key)
     if not fn then return nil end
+    local ah = key:match("^ah") ~= nil
+    if ah and N.ahTipState then
+        local s = N.ahTipState
+        if s.key ~= key or s.source ~= source then N.ahTipState = nil
+        elseif s.waiting and s.tip then return s.tip end
+    end
     N.tipData = nil
     local lines = linesOf(fn)
     -- i156: the item's own tooltip data, kept from this one read for the compare below (it was read a second time for it)
     local data = N.tipData
-    if key:match("^ah") and (not lines or #lines < 2) then N.ahTipRetry(key, id) end
-    if not lines then return { key = key, none = true } end
-    local tip = { key = key, lines = lines }
+    -- Like Bags' existing tooltip bridge, a name plus the game's retrieval line is not a complete item.
+    local retrieving = TS(function() return RETRIEVING_ITEM_INFO end) or "Retrieving item information"
+    local partial = false
+    if ah then for _, line in ipairs(lines or {}) do if line.t == retrieving then partial = true; break end end end
+    local pending = ah and (partial or not lines or (#lines < 2 and not commodity)
+        or (id and TB(function() return C_Item.IsItemDataCachedByID(id) end) == false))
+    if not lines and not ah then return { key = key, none = true } end
+    local tip = { key = key, lines = lines or {}, auction = auction }
+    if pending then
+        tip.loading = N.ahTipRetry(key, id, source) or nil
+        tip.lines[#tip.lines + 1] = { t = tip.loading and "Loading item information..." or "Item information unavailable" }
+        N.ahTipState.tip = tip
+    elseif ah then N.ahTipState = nil end
     if not id then
         local k, i = key:match("^qitem (%a+) (%d+)$")
         if k then id = questItemID(k, tonumber(i)) end
@@ -4781,6 +4833,7 @@ end
 -- /wci ahbuy   a commodity, AH.qty of it: press 1 starts the game's purchase (its total comes back), press 2 confirms
 function ACT.ahbuy()
     if not ahIsOpen() then return false, "no auction house open" end
+    if AH.buy and AH.buy.kind == "item" then return ACT.ahrow(AH.buy.row, "confirm") end
     local key = AH.key
     local info = key and ahKeyInfo(key)
     local id = key and TN(function() return key.itemID end)
@@ -4797,23 +4850,33 @@ function ACT.ahbuy()
     if done then AH.buy = { kind = "commodity", qty = AH.qty, started = true, waiting = true } end
     return done, err
 end
--- /wci ahrow <i>   an item's listing: press 1 arms it with its buyout, press 2 (same listing) buys it (PlaceBid)
-function ACT.ahrow(a)
+-- /wci ahrow <i> only arms; the separate ahbuy confirmation buys that exact auction and total.
+function ACT.ahrow(a, confirm)
     local i = tonumber(a)
     if not (i and ahIsOpen() and AH.key) then return false, "no auction house open" end
+    if N.fight or TB(function() return InCombatLockdown() end) then AH.buy = nil; return false, "in combat" end
+    if not N.mode or not N.holding then AH.buy = nil; return false, "the companion is not holding this window" end
+    local b = AH.buy
+    AH.buy = nil
     local ok, r = CALL(function() return C_AuctionHouse.GetItemSearchResultInfo(AH.key, i) end)
     if not (ok and type(r) == "table") then return false, "the listings changed" end
     local auction, buyout = TN(function() return r.auctionID end), TN(function() return r.buyoutAmount end)
     if not (auction and buyout and buyout > 0) then return false, "no buyout on this one" end
     if TB(function() return r.containsOwnerItem end) then return false, "that one is yours" end
+    if (TN(function() return GetMoney() end) or 0) < buyout then return false, "not enough money" end
+    local qty = TN(function() return r.quantity end)
     local t = TN(function() return GetTime() end) or 0
-    local b = AH.buy
-    if b and b.kind == "item" and b.row == i and b.armedAt and t - b.armedAt <= AH_ARM then
-        if (TN(function() return GetMoney() end) or 0) < buyout then AH.buy = nil; return false, "not enough money" end
-        AH.buy = nil
+    if confirm == "confirm" then
+        if not (b and b.kind == "item" and b.row == i and b.key == AH.key and b.auction == auction and b.total == buyout
+                and b.qty == qty and b.armedAt and t - b.armedAt <= AH_ARM) then return false, "the listings changed" end
         return run(function() C_AuctionHouse.PlaceBid(auction, buyout) end)
     end
-    AH.buy = { kind = "item", row = i, total = buyout, qty = TN(function() return r.quantity end), armedAt = t }
+    local seen
+    for _, row in ipairs(AH.itemRows or {}) do if row.i == i then seen = row; break end end
+    if not (AH.itemRowsKey == AH.key and seen and seen.auction == auction and seen.price == buyout and seen.count == qty) then
+        return false, "the listings changed"
+    end
+    AH.buy = { kind = "item", row = i, key = AH.key, auction = auction, total = buyout, qty = qty, armedAt = t }
     emitSoon()
     return true
 end
@@ -9233,9 +9296,22 @@ if WC.pad and type(WC.pad.op) == "function" then
         else pcall(dispatch, key) end
         quiet = false
     end
-    for _, ns in ipairs(NS) do pcall(WC.pad.op, ns, ns, viaPad) end
+    function N.ahLookPad(key)
+        local i = type(key) == "string" and key:match("^ahres (%d+)$")
+        -- On an item's page these retained browse cells are READ ONLY; purchase cells stay on iqty/ahbuy.
+        if i and isOpen("auction") and AH.tab == "browse" and AH.key and AH.itemRows and AH.itemRowsKey == AH.key then
+            viaPad("look ahrow " .. i)
+        else viaPad(key) end
+    end
+    for _, ns in ipairs(NS) do pcall(WC.pad.op, ns, ns, ns == "ibuy" and N.ahLookPad or viaPad) end
     -- the quantity row never changes: column k-1 is "k purchases", claimed once and kept
-    if pcall(WC.pad.op, "iqty", "iqty", viaPad) and type(WC.pad.slotFor) == "function" then
+    local function viaQty(key)
+        local i = type(key) == "string" and key:match("^qty (%d+)$")
+        -- A quantity cell may select an item auction, never confirm it. A stale count tap cannot purchase.
+        if i and isOpen("auction") and AH.key and AH.itemRows and AH.itemRowsKey == AH.key then viaPad("ahrow " .. i)
+        else viaPad(key) end
+    end
+    if pcall(WC.pad.op, "iqty", "iqty", viaQty) and type(WC.pad.slotFor) == "function" then
         for k = 1, QTY_MAX do pcall(WC.pad.slotFor, "iqty", "qty " .. k) end
     end
     -- a new UI scale moves every cell: re-publish the geometry at once, not at the next change

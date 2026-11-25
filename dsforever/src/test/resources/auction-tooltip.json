@@ -1,0 +1,11 @@
+{
+  "key": "ahrow 1",
+  "auction": 7001,
+  "lines": [
+    { "t": "Mail of Strength" },
+    { "t": "87 Armor", "r": "Mail" },
+    { "t": "+5 Strength", "c": "00ff00" },
+    { "t": "Requires Level 10", "c": "ff0000" },
+    { "t": "Sell Price:", "m": 123 }
+  ]
+}

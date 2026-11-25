@@ -3,7 +3,7 @@
     python tools/test_interact.py [t_name.lua ...]      (default: every t_*.lua there)
 
 Each test script returns its PASS / FAIL lines. Needs lupa. Exit code 1 on any failure."""
-import lupa, sys, os
+import lupa, sys, os, json
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 addons = os.path.join(ROOT, 'companion', 'app', 'src', 'main', 'assets', 'companion', 'addons')
 HERE = os.path.join(ROOT, 'tools', 'interact_tests')
@@ -13,8 +13,8 @@ local mt = {}
 mt.__index = function() return dummy end
 mt.__call = function() return dummy end
 dummy = setmetatable({}, mt)
-unpack = table.unpack
-loadstring = load
+unpack = unpack or table.unpack
+loadstring = loadstring or load
 SENT, ROWS, CELLS, SECROWS = {}, {}, {}, {}
 local cellN = 0
 -- the game's mail, as far as the tests need it
@@ -76,14 +76,27 @@ src = src.replace("local ADDON = ...", "local ADDON = 'x'", 1)
 src += "\n_G.__N = N; _G.__ACT = ACT; _G.__ON = ON; _G.__MAIL = MAIL; _G.__AH = AH; _G.__build = buildDoc; _G.__LOOT = LOOT\n"
 src += "_G.__padPress = padPress\n"           # i161 (t_voice.lua): the controller's presses, as the capture hands them
 names = sys.argv[1:] or sorted(n for n in os.listdir(HERE) if n.startswith("t_") and n.endswith(".lua"))
+def plain(value):
+    if lupa.lua_type(value) != 'table':
+        return value
+    if len(value) > 0:
+        return [plain(value[i]) for i in range(1, len(value) + 1)]
+    return {k: plain(v) for k, v in value.items()}
 fails = 0
 for n in names:
     L = lupa.LuaRuntime()                    # each test file in a fresh game: no state leaks from one to the next
+    L.globals().__ROOT = ROOT
     L.execute(STUB)
     L.execute(chat.replace("local ADDON = ...", "local ADDON = 'WowCompanion'", 1))
     L.execute(src)
     res = L.execute(open(os.path.join(HERE, n), encoding="utf-8").read())
     print(res)
     fails += str(res).count("FAIL ")
+    if n == 't_ahtooltip.lua':
+        fixture = os.path.join(ROOT, 'dsforever', 'src', 'test', 'resources', 'auction-tooltip.json')
+        with open(fixture, encoding='utf-8') as f:
+            matches = plain(L.globals().__AH_TOOLTIP_DOC['tip']) == json.load(f)
+        print(('PASS ' if matches else 'FAIL ') + 'AH tooltip renderer fixture matches the actual Lua producer')
+        fails += not matches
 print("failed: %d" % fails)
 sys.exit(1 if fails else 0)

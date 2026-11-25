@@ -181,7 +181,7 @@ TIPS.keyData = nil
 timers = {}
 tp = N.tipOf("ahres 1")
 chk("ahres: GetItemKey with the required level", TIPS.key and TIPS.key[1] == 555 and TIPS.key[2] == 30 and TIPS.key[3] == 7 and TIPS.key[4] == 12)
-chk("no data yet: the item asked for, a look again soon", tp and tp.none and AHS.asked == 555 and #timers == 1, AHS.asked)
+chk("no data yet: loading shown, the item asked for, a look again soon", tp and tp.loading and tp.lines and AHS.asked == 555 and #timers == 1, AHS.asked)
 
 -- THE MAILBOX's Open All: money then items, one call a step, never a COD letter, stops when the bags are full
 local INBOX = { { money = 500, cod = 0, items = { "Linen" } }, { money = 0, cod = 300, items = { "Ore" } }, { money = 0, cod = 0, items = { "A", "B" } },

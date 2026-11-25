@@ -85,7 +85,7 @@ jobs:
             --tests '*RealmKeyTest' --tests '*LoadGateTest' --tests '*GameVideoMemoryTest' \
             --tests '*Light8Test' --tests '*Light8UnchangedTest' --tests '*FirstRunFolderTest' \
             --tests '*CdnHttpsTest' --tests '*InstallFixesTest' --tests '*MapHoldClaimTest' \
-            --tests '*ResetPlanTest' --tests '*ResetFlowTest'
+            --tests '*ResetPlanTest' --tests '*ResetFlowTest' --tests '*AuctionBuyCellTest' --tests '*AuctionTooltipTest'
       - name: Test bundled Lua and add-on manifest
         if: ${{ !cancelled() }}
         env:
@@ -105,6 +105,7 @@ jobs:
           "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_addon_hotpaths.py -v
           "$RUNNER_TEMP/lua-tests/bin/python" -B companion/tools/test_quest_markers.py -v
           "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_kits.py
+          "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_interact.py
           python3 -B tools/test_performance_hud_horizontal.py
           # The old HUD-switch script expects Polestar windows; Ext's Questie retirement checks replace that assumption.
           for test in test_controller_situations test_chooser_grid test_realm_key test_roombar_mirror test_combat_top_flag test_pad_order test_map_stale_pend test_aura_container; do

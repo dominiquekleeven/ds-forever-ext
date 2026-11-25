@@ -469,14 +469,19 @@ class InteractView(context: Context) : View(context) {
      * sends its tooltip. A look changes nothing in the game (the lock allows a no-action pick tap).
      */
     private var lookedAt: String? = null
+    private var lookedAuction = 0L
     private fun look(cmd: String) {
-        if (dryRun || cmd == lookedAt) return
+        if (dryRun) return
         val d = doc ?: return
         if (!docCurrent || ageMs() > LIVE_MS) return
+        val e = entries().firstOrNull { it.cmd == cmd }
+        val auction = if (cmd.startsWith("ahrow ")) e?.o?.optLong("auction", 0) ?: 0L else 0L
+        if (cmd == lookedAt && auction == lookedAuction) return
         val col = lookCol(d, cmd)
         if (col < 0) return
-        lookedAt = cmd
-        TapBridge.tap(context, d.optJSONObject("pad"), "ipick", col) { }
+        lookedAt = cmd; lookedAuction = auction
+        val row = if (cmd.startsWith("ahrow ") && e?.o?.optString("lookRow") == "ibuy") "ibuy" else "ipick"
+        TapBridge.tap(context, d.optJSONObject("pad"), row, col) { }
     }
 
     /**
@@ -487,7 +492,11 @@ class InteractView(context: Context) : View(context) {
         val t = doc?.optJSONObject("tip") ?: return null
         if (cmd == null || t.optBoolean("none")) return null
         val k = t.optString("key")
-        if (k == cmd) return t
+        if (k == cmd) {
+            if (cmd.startsWith("ahrow ") && t.has("auction") &&
+                entries().firstOrNull { it.cmd == cmd }?.o?.optLong("auction", -1) != t.optLong("auction", -1)) return null
+            return t
+        }
         val m = Regex("""^reward \d+ (\d+)$""").find(cmd) ?: return null
         return if (k == "qitem choice " + m.groupValues[1]) t else null
     }
@@ -868,7 +877,7 @@ class InteractView(context: Context) : View(context) {
         TapBridge.tap(context, msg.optJSONObject("pad"), "iact", col) { }
     }
 
-    private fun rowOf(cmd: String) = InteractRows.of(cmd)
+    private fun rowOf(cmd: String) = InteractRows.of(cmd, doc?.optJSONObject("auction")?.optJSONObject("item")?.optString("rowTap"))
 
     private var lastTapAt = 0L
 
@@ -990,7 +999,8 @@ class InteractView(context: Context) : View(context) {
                 val t = Tab.valueOf(hit.substring(4))
                 if (t != tab) { tab = t; selected = null; scrollA = 0f; qty = 1 }
             }
-            hit.startsWith("sel:ahrow ") || hit.startsWith("sel:taxi ") -> selected = hit.substring(4)
+            hit.startsWith("sel:ahrow ") -> { selected = hit.substring(4); look(selected!!) }
+            hit.startsWith("sel:taxi ") -> selected = hit.substring(4)
             hit.startsWith("bk:") -> bankTap(hit.substring(3))
             hit.startsWith("sel:loot ") -> { selected = hit.substring(4); look(selected!!) }
             hit.startsWith("lt:card ") -> {
@@ -3595,7 +3605,7 @@ class InteractView(context: Context) : View(context) {
             }
             resultLine(c, inner.left + 24f, min(bx - 420f, hx - 24f), cy, now)
             if (buy != null && buy.optString("kind") == "item" && buy.optBoolean("armed")) {
-                val be = entry("ahrow ${buy.optInt("row")}")
+                val be = entry(if (item.optString("rowTap") == "iqty") "ahbuy" else "ahrow ${buy.optInt("row")}")
                 box = { ahBox(c, r, item, max(1, buy.optInt("qty", 1)), buy.optLong("total", 0), false, be, act) }
             }
         } else {
