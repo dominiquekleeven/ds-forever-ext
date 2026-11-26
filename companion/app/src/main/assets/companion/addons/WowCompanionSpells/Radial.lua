@@ -1362,7 +1362,8 @@ local function gameMenuRow()
     local function doc(why, extra)
         local list, kiosk = items()
         local d = { type = "gamemenu", v = GMV, why = why, mode = SN(function() return C_GameRules.GetActiveGameMode() end),
-                    gmLock = S(function() return GameMenuFrame:IsShown() end) == true,
+                    gmLock = WC.nativeMenu and WC.nativeMenu.locked() or
+                        (not WC.nativeMenu and S(function() return GameMenuFrame:IsShown() end) == true),
                     kiosk = kiosk or nil, items = list, cells = COL, binds = bindList(), micro = rectOf(_G.MainMenuMicroButton),
                     fight = (S(function() return InCombatLockdown() end) == true) or nil }
         for k, v in pairs(extra or {}) do d[k] = v end

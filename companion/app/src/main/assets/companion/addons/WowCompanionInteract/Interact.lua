@@ -2670,7 +2670,7 @@ local function buildDoc()
     doc.dead = TB(function() return UnitIsDeadOrGhost("player") end) or nil
     -- i144 (the user's decision 1, 2026-11-11: the game menu "should be locked until the game menu closes"): the game menu was open at
     -- the pull, so the game has the pad for this fight (PadMap m134) - the bottom screen is locked while the menu still shows
-    if TB(function() return _G.GameMenuFrame:IsShown() end) == true then doc.gmLock = true end
+    if WC.nativeMenu and WC.nativeMenu.locked() then doc.gmLock = true end
     if doc.holder == "npc" then
         doc.heal = HEAL.col             -- the app's self-heal cell, only while an "npc" hold exists
         if not doc.pad then doc.pad = padNow end   -- with no window in the document the app still needs the pad to tap it
@@ -8696,9 +8696,10 @@ pcall(function() padGrab:SetScript("OnGamePadStick", onStick) end)
 -- The native menu suspends the existing capture; it does not replace its guest
 -- or its overlay stack. In fights PadMap's secure menu hooks yield its bindings.
 function N.gameMenuSync()
-    local locked = TB(function() return _G.GameMenuFrame:IsShown() end) == true
+    local locked = WC.nativeMenu.visible()
     if locked == (N.gmLock == true) then return end
     N.gmLock = locked
+    if WC.nativeMenu.syncSecure then WC.nativeMenu.syncSecure() end
     if locked then
         N.menuUps, N.menuStickWait = {}, true
         for _, k in ipairs(PAD_KEYS) do N.menuUps[k] = true end
@@ -8732,18 +8733,74 @@ function N.gameMenuSync()
     emitSoon()
 end
 function N.gameMenuHook()
-    if N.gmHooked or type(_G.GameMenuFrame) ~= "table" or type(_G.GameMenuFrame.HookScript) ~= "function" then return end
-    N.gmHooked = pcall(function()
-        _G.GameMenuFrame:HookScript("OnShow", N.gameMenuSync)
-        _G.GameMenuFrame:HookScript("OnHide", N.gameMenuSync)
-    end)
-    N.gameMenuSync()
+    WC.nativeMenu.discover()
 end
 do
+    -- Out-of-combat native ownership only. Forever's GameMenuFrame opens these
+    -- three roots; character/map/NPC/chat windows stay mirrored below as before.
+    -- Combat deliberately keeps the existing GameMenuFrame-only policy.
+    local M = { frames = {}, names = { "GameMenuFrame", "SettingsPanel", "AddonList",
+        "HelpFrame" } }
+    WC.nativeMenu = M
+    function M.visible()
+        if M.fighting or inCombat() then return TB(function() return _G.GameMenuFrame:IsShown() end) == true end
+        for _, e in ipairs(M.frames) do
+            if (not e.modal or e.owned) and TB(function() return e.frame:IsShown() end) == true then return true end
+        end
+        return false
+    end
+    function M.locked()
+        if M.fighting or inCombat() then return M.visible() end
+        return N.gmLock == true or M.visible()
+    end
+    function M.changed(e, shown)
+        if e.modal then
+            if shown and not M.fighting and not inCombat() then e.owned = M.locked() else e.owned = nil end
+        end
+        if M.fighting or inCombat() then
+            if e.name == "GameMenuFrame" then N.gameMenuSync() end
+            return
+        end
+        if shown then
+            N.gameMenuSync()
+        elseif not M.pending then
+            -- Hide-main/show-child and hide-child/show-main can share one call
+            -- stack. Never publish an unlocked document or resume capture there.
+            M.pending = true
+            C_Timer.After(0, function() M.pending = nil; N.gameMenuSync() end)
+        end
+    end
+    function M.discover()
+        local function add(name, modal)
+            local f = rawget(_G, name)
+            if type(f) ~= "table" or type(f.HookScript) ~= "function" or type(f.IsShown) ~= "function" then return end
+            for _, e in ipairs(M.frames) do if e.frame == f then return end end
+            local e = { frame = f, name = name, modal = modal }
+            if modal and TB(function() return f:IsShown() end) then e.owned = M.locked() end
+            M.frames[#M.frames + 1] = e
+            f:HookScript("OnShow", function() M.changed(e, true) end)
+            f:HookScript("OnHide", function() M.changed(e, false) end)
+        end
+        for _, name in ipairs(M.names) do add(name, false) end
+        for i = 1, 4 do add("StaticPopup" .. i, true) end
+        if not M.pending or M.visible() then N.gameMenuSync() end
+    end
     local menuEvents = CreateFrame("Frame")
     menuEvents:RegisterEvent("ADDON_LOADED")
     menuEvents:RegisterEvent("PLAYER_LOGIN")
-    menuEvents:SetScript("OnEvent", function() N.gameMenuHook() end)
+    menuEvents:RegisterEvent("PLAYER_REGEN_DISABLED")
+    menuEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
+    menuEvents:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            -- The event precedes lockdown, as in the existing fight handlers.
+            -- Drop only the new submenu suspension before those handlers arm.
+            M.fighting = true
+            N.gameMenuSync()
+        else
+            if event == "PLAYER_REGEN_ENABLED" then M.fighting = false end
+            N.gameMenuHook()
+        end
+    end)
     N.gameMenuHook()
 end
 

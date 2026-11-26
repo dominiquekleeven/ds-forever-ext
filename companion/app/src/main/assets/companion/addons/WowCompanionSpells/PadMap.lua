@@ -1749,12 +1749,28 @@ R.MENU_HIDE = [=[
     do local self = control
 ]=] .. OV.fbSnip("nil") .. "\nend"
 function R.menuHook(hdr)
+    local m = WC.nativeMenu
+    if m then
+        m.syncSecure = function()
+            if inCombat() then return end
+            if m.locked() then SecureHandlerExecute(hdr, "local control = self\n" .. R.MENU_SHOW)
+            elseif hdr:GetAttribute("wc-menu") then SecureHandlerExecute(hdr, "local control = self\n" .. R.MENU_HIDE) end
+        end
+    end
+    if inCombat() then return end
+    hdr:SetAttribute("wc-native-defer", m and true or nil)
     local menu = _G.GameMenuFrame
-    if R.menuHooked or type(menu) ~= "table" or type(menu.IsShown) ~= "function" or type(menu.HookScript) ~= "function" then return end
-    R.menuHooked = pcall(function()
-        SecureHandlerWrapScript(menu, "OnShow", hdr, R.MENU_SHOW)
-        SecureHandlerWrapScript(menu, "OnHide", hdr, R.MENU_HIDE)
-    end)
+    if not R.menuHooked and type(menu) == "table" and type(menu.HookScript) == "function" then
+        R.menuHooked = pcall(function()
+            SecureHandlerWrapScript(menu, "OnShow", hdr, R.MENU_SHOW)
+            -- Only outside combat, settle after hide-main/show-child finishes.
+            -- Combat and Spells without Interact keep the baseline hide snippet.
+            SecureHandlerWrapScript(menu, "OnHide", hdr,
+                'if not control:GetAttribute("wc-native-defer") or SecureCmdOptionParse("[combat] 1") == "1" then\n' ..
+                R.MENU_HIDE .. '\nend')
+        end)
+    end
+    if m then m.syncSecure() end
 end
 local function routerHeader()
     if R.hdr then R.menuHook(R.hdr); return R.hdr end
@@ -2039,6 +2055,7 @@ local WINDOWS = { "LootFrame", "GossipFrame", "QuestFrame", "MerchantFrame", "Ta
                   "ReadyCheckFrame", "GroupLootFrame1", "GamepadRadial" }
 -- m132: `skip` = a set of names (WINDOWS' own) that do not count, also as a managed frame (Party mode's prompts: PM.PROMPTS)
 local function windowOpen(skip)
+    if not (skip and skip.GameMenuFrame) and WC.nativeMenu and WC.nativeMenu.locked() then return "GameMenuFrame" end
     local hit = nil
     pcall(function()
         local m = _G.GamepadMode and _G.GamepadMode.FrameControlsManager
@@ -2066,7 +2083,10 @@ end
 -- opens the wheel over the room; the binding keeps the game's own radial shut). Quests' generic GUESTS ("pad:..." holders: the wheels,
 -- the map module, chat) bind Start themselves (q35): they keep it.
 -- m134: the game menu is open (the one window that keeps the game's pad at a fight's start: the user, 2026-11-11)
-function R.menuOpen() return TB(function() return _G.GameMenuFrame:IsShown() end) == true end
+function R.menuOpen()
+    if WC.nativeMenu then return WC.nativeMenu.locked() end
+    return TB(function() return _G.GameMenuFrame:IsShown() end) == true
+end
 -- m136 (combat_nav Step 5b): the game windows a bare B may close at a fight's start (WINDOWS less the prompts, which the bottom screen
 -- answers, the game menu, which keeps the game's pad, and the game's radial); a NAMED close button only (the snippet /clicks it)
 R.PULL_SKIP = { GameMenuFrame = true, StaticPopup1 = true, StaticPopup2 = true, StaticPopup3 = true, StaticPopup4 = true,
