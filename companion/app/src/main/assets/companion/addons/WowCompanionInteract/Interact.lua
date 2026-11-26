@@ -9288,7 +9288,9 @@ if type(WC.hub) == "table" and type(WC.hub.element) == "function" then
 end
 
 -- ---------------------------------------------------------------- the tap pad rows
+-- Keep registration temporaries out of this add-on chunk's Lua local-variable limit.
 if WC.pad and type(WC.pad.op) == "function" then
+    (function()
     local function viaPad(key)
         quiet = true
         -- an unknown column arrives as key == nil: a tap on a cell nothing is assigned to
@@ -9318,6 +9320,7 @@ if WC.pad and type(WC.pad.op) == "function" then
     if type(WC.pad.onLayout) == "function" then
         WC.pad.onLayout(function() if lastJson ~= nil then emitSoon() end end)
     end
+    end)()
 end
 
 SLASH_WCI1 = "/wci"

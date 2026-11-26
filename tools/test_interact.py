@@ -4,6 +4,8 @@
 
 Each test script returns its PASS / FAIL lines. Needs lupa. Exit code 1 on any failure."""
 import lupa, sys, os, json
+from lupa.lua51 import LuaRuntime as Lua51
+from lupa.lua54 import LuaRuntime as Lua54
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 addons = os.path.join(ROOT, 'companion', 'app', 'src', 'main', 'assets', 'companion', 'addons')
 HERE = os.path.join(ROOT, 'tools', 'interact_tests')
@@ -75,6 +77,9 @@ src = open(os.path.join(addons, "WowCompanionInteract", "Interact.lua"), encodin
 src = src.replace("local ADDON = ...", "local ADDON = 'x'", 1)
 src += "\n_G.__N = N; _G.__ACT = ACT; _G.__ON = ON; _G.__MAIL = MAIL; _G.__AH = AH; _G.__build = buildDoc; _G.__LOOT = LOOT\n"
 src += "_G.__padPress = padPress\n"           # i161 (t_voice.lua): the controller's presses, as the capture hands them
+# Catch compiler-limit regressions in both the game-compatible and CI-default runtimes.
+for runtime in (Lua51, Lua54):
+    runtime().compile(src)
 names = sys.argv[1:] or sorted(n for n in os.listdir(HERE) if n.startswith("t_") and n.endswith(".lua"))
 def plain(value):
     if lupa.lua_type(value) != 'table':
