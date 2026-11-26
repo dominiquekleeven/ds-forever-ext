@@ -1037,7 +1037,7 @@ class MapView(context: Context) : View(context) {
     private val ZOOM_EASE_TAU = 0.18f              // seconds
 
     init {
-        Settings.onChange { applySettings() }
+        Settings.onChange(weakly(this) { v -> v.applySettings() })
     }
 
     /** Settings changed (from the Settings room): take them on now. */

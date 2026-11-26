@@ -167,6 +167,63 @@ local castNow                  -- below, with the document
 -- its cell casts its spell, so a tap can never open another profession while a rebuild waits for the end of a fight (pad owner)
 local builtSpell = {}
 
+-- Gathering tracking uses explicit ON/OFF cells on the secure open row. The
+-- hardware-click post-hook calls the game's setter, never a spell or a toggle.
+-- State comes from the game. Dots belong to the native top-screen minimap.
+local TRK = { SCAN = 40, col = {}, at = {}, built = {}, bk = {}, now = nil }
+function TRK.setter()
+    if type(C_Minimap) == "table" and type(C_Minimap.SetTracking) == "function" then return C_Minimap.SetTracking end
+    if type(_G.SetTracking) == "function" then return _G.SetTracking end
+end
+function TRK.read()
+    local out = { bySpell = {}, byName = {} }
+    local get = (type(C_Minimap) == "table" and C_Minimap.GetTrackingInfo) or _G.GetTrackingInfo
+    if type(get) ~= "function" then TRK.now = out return out end
+    local n = TRK.SCAN
+    if type(C_Minimap) == "table" and type(C_Minimap.GetNumTrackingTypes) == "function" then
+        local okN, c = CALL(C_Minimap.GetNumTrackingTypes)
+        c = okN and VN(c) or nil
+        if c then n = math.min(c, TRK.SCAN) end
+    end
+    for i = 1, n do
+        local ok, a, _, c = CALL(get, i)
+        if not ok or a == nil then break end
+        local name, act, sid
+        if type(a) == "table" then
+            name = TS(function() return a.name end)
+            act = TB(function() return a.active end)
+            sid = TN(function() return a.spellID end)
+        else
+            name, act = VS(a), VB(c)
+        end
+        local e = { i = i, on = act == true, name = name }
+        if sid then out.bySpell[sid] = e end
+        if name then out.byName[name] = e end
+    end
+    TRK.now = out
+    return out
+end
+function TRK.entry(sid, name)
+    local now = TRK.now
+    if not now then return nil end
+    return (sid and now.bySpell[sid]) or (name and now.byName[name]) or nil
+end
+function TRK.cells(key, sid, name)
+    local c = TRK.col[key]
+    if c then return c end
+    local function free()
+        local col = 0
+        while openLine[col] ~= nil do col = col + 1 end
+        return col
+    end
+    c = {}
+    c.on = free(); openLine[c.on] = "trk"; TRK.at[c.on] = { key = key, sid = sid, n = name, want = true }
+    c.off = free(); openLine[c.off] = "trk"; TRK.at[c.off] = { key = key, sid = sid, n = name, want = false }
+    TRK.col[key] = c
+    openDirty = true
+    return c
+end
+
 -- The "profsel" row's columns are mapped here, not by TapPad's slot namespace: key c = column c,
 -- claimed once at load so the namespace never frees or quarantines anything.
 local function claimSelColumns()
@@ -201,6 +258,13 @@ cardButtons = function(off, n, openSpellID)
                     icon = TN(function() return C_SpellBook.GetSpellBookItemTexture(off + k, Enum.SpellBookSpellBank.Player) end) }
         b.rec = (sp and TB(function() return C_TradeSkillUI.CanTradeSkillShowCraftingUI(sp) end)) or false
         b.o = (openSpellID ~= nil and sp == openSpellID) or nil
+        local te = (not b.rec) and TRK.setter() and TRK.entry(sp, b.n) or nil
+        if te then
+            local key = sp or b.n
+            TRK.cells(key, sp, b.n)
+            b.trk = te.on and 1 or 0
+            TRK.bk[b] = key
+        end
         out[#out + 1] = b
     end
     return out
@@ -212,6 +276,8 @@ function WC.collectProfessions()
     local list = {}
     local ok, p1, p2, p3, p4, p5, p6, p7 = CALL(GetProfessions)
     if not ok then return list end
+    TRK.read()
+    TRK.bk = {}
     local idx = { p1, p2, p3, p4, p5, p6, p7 }
     for pos = 1, 7 do
         local i = VN(idx[pos])
@@ -253,6 +319,14 @@ function WC.collectProfessions()
     if openDirty and WC.professionsOpenRow then WC.professionsOpenRow() end
     for _, e in ipairs(list) do
         if e.oslot ~= nil and builtSpell[e.oslot] ~= e.ospell then e.oslot = nil end
+        for _, b in ipairs(e.btn or {}) do
+            local key = TRK.bk[b]
+            local c = key and TRK.col[key]
+            if c then
+                b.ton = (TRK.built[c.on] == key) and c.on or nil
+                b.toff = (TRK.built[c.off] == key) and c.off or nil
+            end
+        end
     end
     return list
 end
@@ -816,6 +890,7 @@ local WANT = {
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_SUCCEEDED",
     "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED",
     "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+    "MINIMAP_UPDATE_TRACKING",
 }
 local missing = {}
 for _, e in ipairs(WANT) do
@@ -1303,6 +1378,7 @@ local function initOpen(btn, col)
     end
     local spell = openSpell[col]
     builtSpell[col] = spell or false
+    TRK.built[col] = TRK.at[col] and TRK.at[col].key or nil
     if spell then
         btn:SetAttribute("type", "spell")
         btn:SetAttribute("spell", spell)
@@ -1312,7 +1388,21 @@ local function initOpen(btn, col)
     end
 end
 
+function TRK.tap(col)
+    local a = TRK.at[col]
+    lastActionAt = GetTime()
+    if InCombatLockdown() then return ack("gather", a.sid, false, "not in a fight", { on = a.want, name = a.n }) end
+    TRK.read()
+    local e = TRK.entry(a.sid, a.n)
+    if not e then return ack("gather", a.sid, false, "not known", { on = a.want, name = a.n }) end
+    if e.on == a.want then return ack("gather", a.sid, true, nil, { on = a.want, name = e.name or a.n }) end
+    local set = TRK.setter()
+    local ok = set ~= nil and CALL(set, e.i, a.want)
+    ack("gather", a.sid, ok, (not ok) and "the game refused" or nil, { on = a.want, name = e.name or a.n })
+end
+
 local function onOpenTap(col)
+    if TRK.at[col] then return TRK.tap(col) end
     if col == BOOK_COL then
         lastActionAt = GetTime()
         ack("win", nil, builtBook, (not builtBook) and "the game's Professions button is not there" or nil)
@@ -1331,16 +1421,19 @@ local function onOpenTap(col)
     ack("open", openLine[col] or nil, openSpell[col] and true or false, (not openSpell[col]) and "nothing in that column" or nil)
 end
 
+-- Action-less tracking cells answer on the press; casts retain the secure template's phase.
+TRK.OPEN_OPTS = { onPress = true }
 local function ncolsOpen()
     local n = math.max(CLOSE_COL, BOOK_COL) + 1
     for col in pairs(openSpell) do if col + 1 > n then n = col + 1 end end
+    for col in pairs(TRK.at) do if col + 1 > n then n = col + 1 end end
     return n
 end
 
 WC.professionsOpenRow = function()
     if not WC.pad then return end
     openDirty = false
-    WC.pad.secureRow("profopen", ncolsOpen(), initOpen, onOpenTap)
+    WC.pad.secureRow("profopen", ncolsOpen(), initOpen, onOpenTap, TRK.OPEN_OPTS)
 end
 
 if WC.pad then
@@ -1360,7 +1453,7 @@ if WC.pad then
     -- 2026-09-28: demand is over pad4's cap). Say so once, and in every prof doc, so the room
     -- can tell the player "the tap pad is full" instead of waiting for an answer that never comes.
     -- the secure open row is reserved now, empty, so its place in the pad is fixed; its cells come with the professions
-    local rowOpen = WC.pad.secureRow("profopen", 0, initOpen, onOpenTap)
+    local rowOpen = WC.pad.secureRow("profopen", 0, initOpen, onOpenTap, TRK.OPEN_OPTS)
     if not rowCtl or not rowSel or not rowOpen then
         padFull = {}
         if not rowCtl then padFull[#padFull + 1] = "prof" end

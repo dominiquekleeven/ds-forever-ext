@@ -2513,6 +2513,8 @@ end
 -- nbar11: B the square (D-pad) slot, BC the round (face) slot - the band's 40 / 38 units x 1.15; INSET the icon inside its ring; GLYPH the
 -- badge at the ring's top-right (GLYPH_AT: its centre from the slot's, circles lower as drawSlot's), FOCUS the glow past the slot
 local NB = { V = "nbar12", on = false, built = false, B = 46, BC = 44, INSET = 3.5, GLYPH_AT = { 13.2, 13.2, 9.8 }, FOCUS = 30,
+             PAD_EV = { "GAME_PAD_CONNECTED", "GAME_PAD_DISCONNECTED", "GAME_PAD_ACTIVE_CHANGED", "GAME_PAD_CONFIGS_CHANGED" },
+             PAD_SET = { GAME_PAD_CONNECTED = true, GAME_PAD_DISCONNECTED = true, GAME_PAD_ACTIVE_CHANGED = true, GAME_PAD_CONFIGS_CHANGED = true },
              OFF = 50, DX = 160, GLYPH = 17, Y_DEF = 64, S_MIN = 70, S_MAX = 150, S_STEP = 10,
              POLL_S = 0.05, STATE_S = 0.2, set = 1, acc = 0, accS = 0, probed = {}, stats = nil,
              LAYER_OF = { "n", "lt", "rt", "lr" }, LAYER_WORD = { "", "ZL", "ZR", "ZL+ZR" },
@@ -2838,7 +2840,12 @@ function NB.build()
     -- nbar2: the stock bar's spot / scale again when the UI scale or the screen changes
     pcall(f.RegisterEvent, f, "UI_SCALE_CHANGED")
     pcall(f.RegisterEvent, f, "DISPLAY_SIZE_CHANGED")
-    f:SetScript("OnEvent", function() if NB.on then pcall(NB.place) end end)
+    -- The displayed held layer must use the same current trigger indices as the router.
+    for _, e in ipairs(NB.PAD_EV) do pcall(f.RegisterEvent, f, e) end
+    f:SetScript("OnEvent", function(_, e)
+        if NB.PAD_SET[e] then NB.idx = nil; return end
+        if NB.on then pcall(NB.place) end
+    end)
     NB.f, NB.built = f, true
     NB.place()
     return f

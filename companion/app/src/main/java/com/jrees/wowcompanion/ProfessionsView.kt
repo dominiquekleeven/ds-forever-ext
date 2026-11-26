@@ -55,6 +55,8 @@ class ProfessionsView(c: Context) : FrameLayout(c), BLeadsHome {
 
     // what the room is waiting for from the game
     private var opening = 0; private var openingAt = 0L
+    private var gathering: Fk.Btn? = null; private var gatheringAt = 0L
+    private var gatherWhy: String? = null; private var gatherWhyAt = 0L
     private var pendingTap = 0L                               // a Create / Create All / Track tap in flight: no second one
     /** FORGET's ask (the user's pick "Forget, then Tap again"): the profession whose button said "Tap again", and when */
     private var forgetAsk = 0; private var forgetAskAt = 0L
@@ -228,6 +230,14 @@ class ProfessionsView(c: Context) : FrameLayout(c), BLeadsHome {
         if (live && op == "ench" && msg.optBoolean("ok") && msg.optBoolean("pick")) { leaveForPick = true; if (!onPickItem()) leaveForPick = false }
         if (op == "open") { openAnsweredAt = SystemClock.uptimeMillis(); if (!msg.optBoolean("ok")) opening = 0 }
         if (op == "close") closingAt = 0L
+        if (op == "gather") {
+            gathering = null
+            if (!msg.optBoolean("ok")) {
+                gatherWhy = msg.optString("why").takeIf { it.isNotEmpty() && it[0].code > 3 }
+                gatherWhyAt = SystemClock.uptimeMillis()
+                board.postInvalidateDelayed(MESSAGE_MS + 50)
+            }
+        }
         // the addon's answer to the entry: "open now" (or held) -> the ONE book tap; `noopen` (queued behind another room, or a fight's
         // pending take) -> never open the window then (p19)
         if ((op == "book" || op == "page") && msg.optBoolean("noopen")) bookPendingAt = 0L
@@ -298,6 +308,22 @@ class ProfessionsView(c: Context) : FrameLayout(c), BLeadsHome {
         } else {
             forgetAsk = p.id; forgetAskAt = now
             board.postInvalidateDelayed(FORGET_ASK_MS + 50)
+        }
+        board.invalidate()
+    }
+
+    /** One explicit-state tracking tap in flight. Combat never sends a tap. */
+    private fun gatherPress(p: M.Profession, i: Int, b: M.Btn) {
+        val ov = ProfessionsStore.overview
+        val now = SystemClock.uptimeMillis()
+        if (ov?.combat == true) {
+            gatherWhy = "After the fight"; gatherWhyAt = now
+            board.postInvalidateDelayed(MESSAGE_MS + 50); board.invalidate(); return
+        }
+        if (gathering != null && now - gatheringAt < GATHER_WAIT) return
+        val key = Fk.Btn(p.id, i)
+        if (send(M.gatherTap(ov, b, !b.on))) {
+            gathering = key; gatheringAt = now; board.postInvalidateDelayed(GATHER_WAIT + 50)
         }
         board.invalidate()
     }
@@ -394,6 +420,7 @@ class ProfessionsView(c: Context) : FrameLayout(c), BLeadsHome {
             val title = if (viewed == 0) ov?.word("title", "Professions") ?: "Professions" else prof?.name ?: ""
             val note = if (viewed != 0) M.seenAgo(System.currentTimeMillis(), ProfessionsStore.seenAt(viewed), live(viewed)) else null
             UiKit.header(c, w, title, note)
+            if (viewed == 0) gatherNote(c, ov, title, w)
             val tabsX = w - 118f
             val right = tabsX - 4f
             UiKit.professionGround(c, RectF(0f, 62f, right, h), page = viewed != 0)
@@ -525,17 +552,35 @@ class ProfessionsView(c: Context) : FrameLayout(c), BLeadsHome {
          * "no spell casting" ruling): shown dim, no touch, the glow skips it.
          */
         private fun spellButton(c: Canvas, box: RectF, p: M.Profession, i: Int, b: M.Btn) {
-            val live = b.opens && p.craft
+            val ov = ProfessionsStore.overview
+            val opens = b.opens && p.craft
+            val gather = !opens && M.gatherLive(ov, b)
+            val live = opens || gather
             val key = Fk.Btn(p.id, i)
-            val chosen = live && ProfessionsStore.overview?.held == true && focus == key
+            val chosen = live && ov?.held == true && focus == key
             val pushed = live && isDown(key)
-            val down = live && (opening == p.id || pushed)
+            val waiting = gather && gathering == key && SystemClock.uptimeMillis() - gatheringAt < GATHER_WAIT
+            val down = live && ((opens && opening == p.id) || pushed || waiting)
             UiKit.pressed(c, box, pushed) {
-                UiKit.professionButton(c, box, Icons.get(b.icon), b.name, inert = !live, chosen = chosen, down = down)
+                UiKit.professionButton(c, box, Icons.get(b.icon), b.name, inert = !live, chosen = chosen, down = down, on = gather && b.on)
             }
             if (!live) return
-            hits.add(Hit(RectF(box), key) { select(p.id) })
-            nav(key, box, { select(p.id) })
+            val act = if (gather) ({ gatherPress(p, i, b) }) else ({ select(p.id) })
+            hits.add(Hit(RectF(box), key, act))
+            nav(key, box, act)
+        }
+
+        private fun gatherNote(c: Canvas, ov: M.Overview?, title: String, w: Float) {
+            if (ov?.cards?.none { p -> p.btn.any { M.gatherLive(ov, it) } } != false) return
+            val now = SystemClock.uptimeMillis()
+            val msg = gatherWhy?.takeIf { now - gatherWhyAt <= MESSAGE_MS }
+            val x = 24f + UiKit.titlePaint(62f * 0.8f).measureText(Tr.t(title)) + 28f
+            val pt = UiKit.bodyPaint(20f, if (msg != null) Theme.text else Theme.dim)
+            val width = w - 24f - x
+            val lines = if (msg != null) listOf(fit(msg, pt, width))
+                else listOf(fit(M.GATHER_NOTE, pt, width), fit(M.GATHER_WHERE, pt, width))
+            var y = if (lines.size == 1) 38f else 26f
+            for (l in lines) { c.drawText(l, x, y, pt); y += 25f }
         }
 
         /**
@@ -1164,6 +1209,7 @@ class ProfessionsView(c: Context) : FrameLayout(c), BLeadsHome {
         const val SPLIT = 600f
         private const val TAG = "WCPROF"
         private const val MESSAGE_MS = 3000L
+        private const val GATHER_WAIT = 1500L
         /** the search keyboard's D-pad repeat, as Bags' (DirectPad's rooms) */
         private const val KB_REPEAT_FIRST_MS = 280L
         private const val KB_REPEAT_MS = 70L

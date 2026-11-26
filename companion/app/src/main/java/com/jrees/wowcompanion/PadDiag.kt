@@ -317,11 +317,14 @@ object AddonSilence {
      * The review (2026-11-14): a normal logout to character select is a bye with no hello too, and the game's memory may stay over
      * [IN_WORLD_MB] there, so [trafficQuiet] (NativeLogin.trafficQuiet: the game's traffic stopped, which the world's never does) holds
      * a NEW word back; one already on show ([shown]) stays - character select is where the player switches them back on.
+     * Issue 560: [outOfWorld] also holds a new word at character select after disconnect. NativeLogin.outOfWorldHold ends this
+     * diagnostic hold when documents return or [WorldTraffic] detects sustained world traffic, even if add-ons remain disabled.
      */
     fun startMode(line: String, rowUp: Boolean, signedIn: Boolean, downloading: Boolean, silent: Boolean, inWorld: Boolean,
-                  trafficQuiet: Boolean = false, shown: Boolean = false, downloadingAfter: Boolean = false): StartMode = when {
+                  trafficQuiet: Boolean = false, shown: Boolean = false, downloadingAfter: Boolean = false,
+                  outOfWorld: Boolean = false): StartMode = when {
         !isWaitLine(line) || rowUp -> StartMode.KEEP
-        silent && inWorld && (!trafficQuiet || shown) -> StartMode.ADDONS
+        silent && inWorld && (!(trafficQuiet || outOfWorld) || shown) -> StartMode.ADDONS
         // #579: past the login screen and still downloading: "Game downloading (N MB a minute): leave it running"
         signedIn && downloadingAfter && (line == PreLoginTraffic.WAITING_LINE || line == WORLD_LINE || isDownloadAfterLine(line)) ->
             StartMode.DOWNLOAD_LINE
@@ -329,6 +332,23 @@ object AddonSilence {
         signedIn && !downloading && (line == PreLoginTraffic.WAITING_LINE || isDownloadAfterLine(line)) -> StartMode.WORLD_LINE
         else -> StartMode.KEEP
     }
+
+    /**
+     * Issue 560: character-select keepalives and short bursts are not a return to the world.
+     * Require [WORLD_S] consecutive seconds in the world-rate range. Downloads do not count.
+     * Latch until the next departure. This changes only the add-ons warning, never login policy.
+     */
+    class WorldTraffic {
+        private var busyFor = 0
+        var back = false; private set
+        fun second(rx: Long) {
+            if (rx in WORLD_RX..WORLD_RX_MAX) { if (++busyFor >= WORLD_S) back = true } else busyFor = 0
+        }
+        fun reset() { busyFor = 0; back = false }
+    }
+    const val WORLD_RX = 1_500L
+    const val WORLD_RX_MAX = PreLoginTraffic.BUSY_MB * (1L shl 20) / 60
+    const val WORLD_S = 15
 
     /** issue #231: the local reader in one line ([sinceFedMs] -1 = nothing read yet); only the file's name, never the folder's */
     fun reader(path: String, exists: Boolean, len: Long, mtime: Long, nowWall: Long, fed: Long, sinceFedMs: Long,

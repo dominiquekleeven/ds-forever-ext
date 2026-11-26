@@ -1830,6 +1830,8 @@ local function padIndex(name)
     v = ok and tonumber(v) or nil
     return (v and v >= 0) and math.floor(v) + 1 or nil
 end
+-- Re-read trigger indices after controller changes. No game setting is written.
+R.trNow = function() return tostring(padIndex("PADLTRIGGER")) .. "/" .. tostring(padIndex("PADRTRIGGER")) end
 -- wire one face button to the router (out of combat): the bars' buttons for its position, the triggers' indexes, the snippet, the driver
 -- Forever's buttons for one bar position (1-4 the D-pad, 5-8 the faces), per anchor, plus the triggers' indexes and the key's name
 local function routerWire(b, pos, key)
@@ -1855,6 +1857,7 @@ local function routerWire(b, pos, key)
     if R.hdr then pcall(SecureHandlerSetFrameRef, b, "wc-hdr", R.hdr) end          -- m26: the slots' macro texts
     b:SetAttribute("wc-lt", padIndex("PADLTRIGGER"))
     b:SetAttribute("wc-rt", padIndex("PADRTRIGGER"))
+    R.trWired = R.trNow()
     b:SetAttribute("wc-key", key)                                     -- the key's name: room mode sends it (Interact's contract)
 end
 local function routerKey(pos)
@@ -5372,15 +5375,38 @@ local WANT = { "PLAYER_ENTERING_WORLD", "ACTIONBAR_SLOT_CHANGED", "UPDATE_MACROS
 -- (no new main-chunk locals: Lua's 200; all on R)
 function R.rewireAll()
     R.rewireQueued = false
-    if inCombat() then return end
+    if inCombat() then R.rewireFight = true; return end
+    R.rewireFight = nil
     for pos, b in pairs(face.buttons) do if R.wrapped[pos] then pcall(routerWire, b, pos, R.keys[pos]) end end
     for i = 1, 4 do if R.dbtn[i] then pcall(routerWire, R.dbtn[i], i, R.keys[i]) end end
     if R.bbtn then pcall(routerWire, R.bbtn, 7, R.keys[7]) end
+    if R.padRelink then R.padRelink = nil; if OV.pm and OV.pm.link then pcall(OV.pm.link) end end
 end
+-- The first wiring reads current indices. Mouse/pad activity alone must not wire an unused router.
+R.PAD_EV = { GAME_PAD_CONNECTED = true, GAME_PAD_DISCONNECTED = true, GAME_PAD_ACTIVE_CHANGED = true, GAME_PAD_CONFIGS_CHANGED = true }
+R.padEvent = function(e)
+    if e == "GAME_PAD_ACTIVE_CHANGED" and (R.trWired == nil or R.trWired == R.trNow()) then return false end
+    R.padWhy = e
+    R.padRelink = true
+    if inCombat() then R.rewireFight = true; return true end
+    if not R.rewireQueued then R.rewireQueued = true; C_Timer.After(0.3, R.rewireAll) end
+    return true
+end
+-- Stance/possess layout changes move the displayed bar immediately. Refresh secure refs out of combat.
+R.LAYOUT_CV = { gamepadstancebaroverride = true, gamepadpossessbaroverride = true, gamepadusecompactactionbar = true }
+R.layoutCv = function(name) return type(name) == "string" and R.LAYOUT_CV[name:lower()] == true end
 R.fs = CreateFrame("Frame")
 for _, e in ipairs({ "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "PLAYER_REGEN_ENABLED", "UPDATE_BONUS_ACTIONBAR",
-                     "PLAYER_ENTERING_WORLD" }) do pcall(function() R.fs:RegisterEvent(e) end) end
-R.fs:SetScript("OnEvent", function()
+                     "PLAYER_ENTERING_WORLD", "GAMEPAD_STANCE_BAR_OVERRIDE_CHANGED", "GAMEPAD_POSSESS_BAR_OVERRIDE_CHANGED",
+                     "CVAR_UPDATE", "GAME_PAD_CONNECTED", "GAME_PAD_DISCONNECTED", "GAME_PAD_ACTIVE_CHANGED",
+                     "GAME_PAD_CONFIGS_CHANGED" }) do pcall(function() R.fs:RegisterEvent(e) end) end
+R.fs:SetScript("OnEvent", function(_, e, a1)
+    if R.PAD_EV[e] then pcall(R.padEvent, e); return end
+    if e == "CVAR_UPDATE" and not R.layoutCv(TS(function() return a1 end)) then return end
+    if e == "CVAR_UPDATE" or e == "GAMEPAD_STANCE_BAR_OVERRIDE_CHANGED" or e == "GAMEPAD_POSSESS_BAR_OVERRIDE_CHANGED" then
+        R.layoutWhy = e
+        if inCombat() then R.rewireFight = true end
+    end
     C_Timer.After(0.2, function()                                       -- m57: the form now's own bar (the game names it a moment later)
         pcall(OV.formLearn)
         -- m142 review: the Controller room open follows the new stance (its auto form, OV.fe) before the next input

@@ -1257,6 +1257,7 @@ local function collectAuction()
     if ah.sell then
         local s2 = ah.sell
         ah.sb = #(s2.bags or {})
+        ah.sx = #(s2.no or {})                                          -- issue 590: the stacks the game refuses
         ah.sw = s2.item and (s2.wn or 0) or -1
         ah.sst = ({ posting = 1, warn = 2, failed = 3 })[s2.status or ""]
         if s2.item then
@@ -4909,18 +4910,32 @@ function AH.bagName(bag)
     if bag == 0 then return AH.gs("BACKPACK_TOOLTIP", "Backpack") end
     return "Bag " .. bag
 end
-function AH.sellGroups(bags)
+function AH.sellGroups(bags, no)
     local out, at = {}, {}
-    for _, b in ipairs(bags) do
-        local g = at[b.bag]
+    local function group(bag)
+        local g = at[bag]
         if not g then
-            g = { bag = b.bag, name = AH.bagName(b.bag), n = 0, shut = AH.shut[b.bag] or nil }
-            at[b.bag] = g
+            g = { bag = bag, name = AH.bagName(bag), n = 0, shut = AH.shut[bag] or nil }
+            at[bag] = g
             out[#out + 1] = g
         end
-        g.n = g.n + 1
+        return g
     end
+    for _, b in ipairs(bags) do local g = group(b.bag); g.n = g.n + 1 end
+    for _, b in ipairs(no or {}) do local g = group(b.bag); g.x = (g.x or 0) + 1 end
+    table.sort(out, function(a, b) return a.bag < b.bag end)
     return out
+end
+-- issue 590: the game's own reason for this slot's refusal; no auction action or tap cell.
+function AH.noWhy(bag, sl, info)
+    if TB(function() return info.isBound end) == true then return "bound" end
+    local okQ, qi = CALL(function() return C_Container.GetContainerItemQuestInfo(bag, sl) end)
+    if okQ and type(qi) == "table" and (TB(function() return qi.isQuestItem end) == true or (TN(function() return qi.questID end) or 0) > 0) then
+        return "quest"
+    end
+    local okD, dc, dm = CALL(function() return C_Container.GetContainerItemDurability(bag, sl) end)
+    if okD and type(dc) == "number" and type(dm) == "number" and dm > 0 and dc < dm then return "damaged" end
+    return "no"
 end
 -- i167: the throttle greys Post; the game's AUCTION_HOUSE_THROTTLED_SYSTEM_READY can come before our document or not at all on this
 -- client, so while it greys Post the form is looked at again every AH.THROTTLE_POLL s (one timer at a time, the window open)
@@ -4968,7 +4983,7 @@ function AH.loc(bag, sl)
     if ok and type(loc) == "table" then return loc end
 end
 function AH.sellBags()
-    local out = {}
+    local out, no = {}, {}
     for bag = 0, 5 do
         for sl = 1, TN(function() return C_Container.GetContainerNumSlots(bag) end) or 0 do
             local ok, info = CALL(function() return C_Container.GetContainerItemInfo(bag, sl) end)
@@ -4979,10 +4994,13 @@ function AH.sellBags()
                 out[#out + 1] = { bag = bag, s = sl, id = id, icon = TN(function() return info.iconFileID end),
                     n = TN(function() return info.stackCount end) or 1, q = TN(function() return info.quality end),
                     name = link and link:match("%[(.-)%]") or nil, locked = TB(function() return info.isLocked end) or nil }
+            elseif loc then
+                no[#no + 1] = { bag = bag, s = sl, id = id, icon = TN(function() return info.iconFileID end),
+                    n = TN(function() return info.stackCount end) or 1, q = TN(function() return info.quality end), no = AH.noWhy(bag, sl, info) }
             end
         end
     end
-    return out
+    return out, no
 end
 function AH.defaultPrice(loc)
     if TB(function() return C_AuctionHouse.ShouldAutoPopulatePrice() end) == false then return 0 end
@@ -5026,11 +5044,12 @@ function AH.sellWhy(sl, deposit)
 end
 function AH.sellCollect()
     local t = TN(function() return GetTime() end) or 0
-    local out = { bags = AH.sellBags(), dur = AH.dur(), copper = TB(function() return C_AuctionHouse.SupportsCopperValues() end) or nil, cols = AH.SCOLS,
+    local bags, no = AH.sellBags()
+    local out = { bags = bags, no = (#no > 0) and no or nil, dur = AH.dur(), copper = TB(function() return C_AuctionHouse.SupportsCopperValues() end) or nil, cols = AH.SCOLS,
                   durs = { AH.gs("AUCTION_DURATION_ONE", "12 Hours"), AH.gs("AUCTION_DURATION_TWO", "24 Hours"), AH.gs("AUCTION_DURATION_THREE", "48 Hours") },
                   boWord = AH.gs("AUCTION_HOUSE_BUYOUT_MODE_CHECK_BOX", "Buyout only") }
     if AH.sellMsg and t - AH.sellMsg.t <= 4 then out.msg = { ok = AH.sellMsg.ok, words = AH.sellMsg.words } end
-    out.groups = AH.sellGroups(out.bags)
+    out.groups = AH.sellGroups(out.bags, out.no)
     if AH.postingAt and t - AH.postingAt <= 5 then out.posting = true else AH.postingAt = nil end
     local sl = AH.sell
     if sl and not TB(function() return C_Item.DoesItemExist(sl.loc) end) then AH.sell, sl = nil, nil end

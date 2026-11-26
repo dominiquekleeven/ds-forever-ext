@@ -621,9 +621,9 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
         chatView.tapper = { cells, gap -> TapBridge.tapsSpaced(this, questsPad, cells, gap) }
         // hold to talk (HoldTalk): the toolbar's microphone follows its switch and the last used chat's colour
         chatView.onTalkChannel = { if (talkPanelUp()) talkTabs.refresh(chatView.talkTabs()); talkDraw() }
-        HomeSettings.onChange { ui.post { talkDraw() } }
+        HomeSettings.onChange(weakly(this) { h -> h.ui.post { h.talkDraw() } })
         // movable Home: a new layout (a preset, the swap, another character's) tells the add-on its DS toolbar sides (out of combat)
-        HomeLayoutStore.onChange { ui.post { lastDpad?.let { mirrorCheck(it); topCheck(it) } } }
+        HomeLayoutStore.onChange(weakly(this) { h -> h.ui.post { if (!h.shell.hostGone()) h.lastDpad?.let { h.mirrorCheck(it); h.topCheck(it) } } })
         characterView = CharacterView(this)
         // B leaves the cursor -> Home (user ruling, every room)
         characterView.onLeave = { roomLeft(Room.CHARACTER) }
@@ -844,15 +844,15 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
         MemWatch.start(this)                                              // WCMEM: where the memory goes (the 1.0.17 low-memory kills); 1.0.28: Android's trims
         // the spell radials' own names / icons (RadialMeta): the bars and the Controller room show a change at once
         RadialMeta.init(this)
-        RadialMeta.onChange { lastPadMap?.let { m -> homeView.onPadMap(m); controllerView.onPadMap(m); spellbookView.onPadMap(m) } }
+        RadialMeta.onChange(weakly(this) { h -> h.lastPadMap?.let { m -> h.homeView.onPadMap(m); h.controllerView.onPadMap(m); h.spellbookView.onPadMap(m) } })
         // the user's pick 2026-11-13: Start over game windows - a change is told to the add-on at once (the next padmap confirms it)
         var pauseOverSeen = HomeSettings.pauseOverGame
-        HomeSettings.onChange { ui.post {
-            if (!shell.hostGone() && HomeSettings.pauseOverGame != pauseOverSeen) {
-                pauseOverSeen = HomeSettings.pauseOverGame; pauseOverSentAt = 0L; pauseOverTell(lastPadMap, "the setting")
+        HomeSettings.onChange(weakly(this) { h -> h.ui.post {
+            if (!h.shell.hostGone() && HomeSettings.pauseOverGame != pauseOverSeen) {
+                pauseOverSeen = HomeSettings.pauseOverGame; h.pauseOverSentAt = 0L; h.pauseOverTell(h.lastPadMap, "the setting")
             }
-            if (!shell.hostGone()) petBTell("the setting")                     // B: pet follow, this character's choice
-        } }
+            if (!h.shell.hostGone()) h.petBTell("the setting")                     // B: pet follow, this character's choice
+        } })
         homeView.onPartyLeaveRest = { partyLeaveHome("a Home module full screen") }
         // Home's controller reader passes each held mask to Interact's pop-up while it shows: its Make Space ring follows the real A
         // press (display only; one getevent). In a room no reader of Home's runs: the ring falls back to Interact's document
@@ -948,7 +948,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
         // P4: the room bar's order is the layout record's (per character, D5); edit mode drives it from its draft (HomeView.roomBar)
         homeView.roomBar = strip
         strip.showOrder(RoomBar.shown(HomeSettings.layout), 0L)
-        HomeSettings.onChange { ui.post { if (!shell.hostGone()) roomBarSync() } }
+        HomeSettings.onChange(weakly(this) { h -> h.ui.post { if (!h.shell.hostGone()) h.roomBarSync() } })
         // THE ROOM'S COMBAT CUE (Home; the user: "I want the room that I am in to flash red"): over every room, under the bar and every
         // overlay; it takes no touch
         roomCue = RoomCombatCue(this)
@@ -1062,7 +1062,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
             Thread({ runCatching { ReportFlow.autoSave(app) }.onFailure { Log.w("WCREPORT", "auto-save failed", it) }; SetupBridge.loginSaved() },
                 "report-autosave").start()
         }
-        DiagLog.onChange { ui.post { ui.removeCallbacks(recTick); recTick.run() } }
+        DiagLog.onChange(weakly(this) { h -> h.ui.post { h.ui.removeCallbacks(h.recTick); h.recTick.run() } })
         SetupBridge.openLoginForm = { loginPrompt.open() }
         // a refused saved login (M3): "Update login" = the same form, then the game restarts by itself with it (test4 ruling)
         SetupBridge.updateLogin = { restartOnSave = true; loginPrompt.open() }
@@ -2678,7 +2678,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
         // the review: the game's traffic quiet (character select after a normal logout, its memory still high) holds a new word back
         val mode = if (!free) AddonSilence.StartMode.KEEP else AddonSilence.startMode(startView.line, startView.login != StartView.Login.NONE,
             signedIn, NativeLogin.downloading, silence.silent, worldMem.inWorld, NativeLogin.trafficQuiet, shown = startView.addons != null,
-            downloadingAfter = NativeLogin.downloadingAfter)
+            downloadingAfter = NativeLogin.downloadingAfter, outOfWorld = NativeLogin.outOfWorldHold)
         when (mode) {
             AddonSilence.StartMode.ADDONS -> {
                 if (startView.addons == null) startCause = addonsCause()
@@ -4612,7 +4612,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
         // the triage (2026-11-14): this game run's silence (documents "seen" may be an earlier run's)
         val now = System.currentTimeMillis()
         val quiet = if (silence.silent) "; add-ons silent ${GameLife.minutes(silence.silentMs(now))} (since ${silence.clock.words}" +
-            "${if (worldMem.inWorld) ", the game's memory says the world" else ""}${if (NativeLogin.trafficQuiet) ", its traffic quiet" else ""})" else ""
+            "${if (worldMem.inWorld) ", the game's memory says the world" else ""}${if (NativeLogin.trafficQuiet) ", its traffic quiet" else ""}${if (NativeLogin.outOfWorld) ", out of the world since a logout or a disconnect${if (NativeLogin.outOfWorldHold) "" else " (its traffic back)"}" else ""})" else ""
         return "$start; room ${room.name.lowercase()}; documents ${if (docFlowSeen) "seen" else "none yet"}$docs$quiet" +
             (if (over.isEmpty()) "" else "; over it: ${over.joinToString()}") + setup
     }

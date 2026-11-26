@@ -5,8 +5,15 @@
 | Crate/supply-box selection | `a6c6d975e34fda50d8074316179bc3d03dee95eb`, Bags/test portions of `9b769805a5e1e4defb89aa68d9abbb529403a393` | Keep trade goods through the whole pick; omit the crate; no duplicate consumables; kits remain gear-only. |
 | Patch-server failures | `19eef43181e32450283b93855ecf0abbb415fd55`, downloader-only correction from `f8c9d480a5b6560d8a42786235b397d90a4c2042` | Three bounded direct-install attempts; reason-specific errors; setup log and es/fr display. No authentication or TLS-policy change. |
 | Java frame-generation freeze mitigation | `829fcce2cbeed0f11517f2b4dc6c02194e75fab8`, `c2114eb42007d00dceead6632b46ab1e53ecd0fc` | Separate Java lock; unchanged pushes skipped; render lists deferred during shader/on-off pushes; lifecycle retains the native handle. Ext additionally fingerprints shader content because the cache writer reuses filenames. |
+| Weak view/host listeners | `4319540c`, host-listener portions of `3e8acf8f` | Weak owner arguments for selected static settings listeners; preserve Ext's six host registrations. No broad lifecycle rewrite. |
+| False disabled-add-on warning | `23ddf008`, warning/traffic portions of `9b769805` | Diagnostic suppression around disconnect/character select; sustained world traffic rearms genuine warnings. No authentication-policy or polling changes. |
+| AH Sell | `e46b123a`, AH portions of `9b769805` | Refused-item reasons, bag counts, scrollbar and controller-follow; keep Ext auction Buy Now and tooltip protections. |
+| LT/RT bar correctness | `c59b0f3c`, `b1766039`, `37538de7` | Scoped bar/stance/controller/possess rewiring, combat deferral and index invalidation; preserve Ext menu ownership and neutral gates. |
+| Gathering tracking | `9170d42a`, `0d05f993`, `2bebb643` | Explicit on/off from actual native tracking state; Ext permits only one global pending tracking tap. Native minimap dots only. |
 
 These fixes ship upstream in stable v1.0.39 and remain in v1.0.41 (`afefaf66a39b756f86d8dac5cba7ca8850282876`). This is not an upstream version merge.
+
+Ext.9 selects the additional groups from the v1.0.39–v1.0.41 review. It excludes logpolling/response-latency, indoor, driver, native-renderer and broad UI changes. Local memory/warning harness: 33 tests; AH grid/translation harness: 13; LT/RT: 35; gathering: 21; retained combat: 530; native-menu ownership: 134. Android view collection and screenshots are CI gates, not local device evidence. Protected source backups: `/home/apc/infra/backups/ds-ext-weakviews-disconnect-20261126/`, `/home/apc/infra/backups/ds-ext-ahsell-backport-20261126/`, `/home/apc/infra/backups/ds-ext-ltrt-gather-20261126/`. Integration recovery: `/home/apc/infra/backups/ds-ext-integration-20261126/RECOVERY.md`.
 
 ## Limits
 

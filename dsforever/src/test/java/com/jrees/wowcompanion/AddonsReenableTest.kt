@@ -296,6 +296,41 @@ class AddonsReenableTest {
             inWorld = true, trafficQuiet = true))
     }
 
+    @Test fun characterSelectAfterADisconnectsReloginHoldsANewWordBack() {
+        val world = AddonSilence.WORLD_LINE
+        assertEquals(S.ADDONS, AddonSilence.startMode(world, false, true, false, silent = true, inWorld = true))
+        assertEquals(S.KEEP, AddonSilence.startMode(world, false, true, false, silent = true, inWorld = true, outOfWorld = true))
+        assertEquals(S.WORLD_LINE, AddonSilence.startMode(PreLoginTraffic.WAITING_LINE, false, true, false,
+            silent = true, inWorld = true, outOfWorld = true))
+        assertEquals("an existing warning stays", S.ADDONS, AddonSilence.startMode(world, false, true, false,
+            silent = true, inWorld = true, outOfWorld = true, shown = true))
+        assertEquals(S.KEEP, AddonSilence.startMode(world, false, true, false,
+            silent = false, inWorld = true, outOfWorld = true, shown = true))
+    }
+
+    @Test fun theWorldBackByItsTrafficEndsTheDisconnectHold() {
+        val w = AddonSilence.WorldTraffic()
+        fun mode() = AddonSilence.startMode(AddonSilence.WORLD_LINE, false, true, false,
+            silent = true, inWorld = true, outOfWorld = !w.back)
+        repeat(120) { s -> w.second(if (s % 3 == 0) 393L else if (s == 40) 47_000L else 0L) }
+        assertFalse("keepalives and a short list burst are no world", w.back)
+        assertEquals(S.KEEP, mode())
+        repeat(60) { w.second(AddonSilence.WORLD_RX_MAX + 1) }
+        assertFalse("downloads are no world", w.back)
+        repeat(AddonSilence.WORLD_S - 1) { w.second(2_400L) }
+        w.second(300L)
+        repeat(AddonSilence.WORLD_S - 1) { w.second(2_400L) }
+        assertFalse("a quiet second restarts the count", w.back)
+        w.second(2_400L)
+        assertTrue(w.back)
+        assertEquals("silent add-ons in the world get their warning again", S.ADDONS, mode())
+        w.second(0L)
+        assertTrue("latched until departure", w.back)
+        w.reset()
+        assertFalse(w.back)
+        assertEquals(S.KEEP, mode())
+    }
+
     @Test fun theStartScreenSaysWhatTheCardSays() {
         val c = ReportNotice.card(ReportNotice.State.AddonsOff(null))
         assertEquals(ReportNotice.ADDONS_TITLE, c.title); assertEquals(ReportNotice.ADDONS_DEFAULT, c.text)

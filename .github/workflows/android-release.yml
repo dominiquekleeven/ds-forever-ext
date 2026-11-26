@@ -41,6 +41,8 @@ jobs:
           ADDON_TILES_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
           BOTTOM_ROUTE_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
           PERFORMANCE_HUD_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
+          AH_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
+          GATHER_SHOTS_DIR: ${{ runner.temp }}/ds-ext-menu-shots
         run: |
           bash gradlew --no-daemon --no-configuration-cache --max-workers=2 \
             -Dorg.gradle.parallel=false '-Dorg.gradle.jvmargs=-Xmx5g -Dfile.encoding=UTF-8' \
@@ -54,7 +56,8 @@ jobs:
             --tests '*GameSessionServiceTest' --tests '*WowLaunchSwitchTest' --tests '*FirstRunArtTest' \
             --tests '*CrashStateLineTest' --tests '*WowCdnStreamTest' --tests '*HomeMapControlsShotsTest' \
             --tests '*FrameGen*Test' --tests '*FrameLimitTest' --tests '*PerformanceHudViewTest' \
-            --tests '*QuestieMapMarkersTest' --tests '*WowPatchAnswerTest' --tests '*RendererFreezeLocksTest'
+            --tests '*QuestieMapMarkersTest' --tests '*WowPatchAnswerTest' --tests '*RendererFreezeLocksTest' \
+            --tests '*HomeViewsReleasedTest' --tests '*AhSellRefusedShotsTest' --tests '*ProfessionsGatherShotsTest'
       - name: Test Questie replacement and Ext update channel
         if: ${{ !cancelled() }}
         env:
@@ -85,7 +88,9 @@ jobs:
             --tests '*RealmKeyTest' --tests '*LoadGateTest' --tests '*GameVideoMemoryTest' \
             --tests '*Light8Test' --tests '*Light8UnchangedTest' --tests '*FirstRunFolderTest' \
             --tests '*CdnHttpsTest' --tests '*InstallFixesTest' --tests '*MapHoldClaimTest' \
-            --tests '*ResetPlanTest' --tests '*ResetFlowTest' --tests '*AuctionBuyCellTest' --tests '*AuctionTooltipTest'
+            --tests '*ResetPlanTest' --tests '*ResetFlowTest' --tests '*AuctionBuyCellTest' --tests '*AuctionTooltipTest' \
+            --tests '*WeaklyTest' --tests '*HomeListenerWiringTest' --tests '*HomeEditWiringTest' \
+            --tests '*AhSellGridTest' --tests '*TrTest' --tests '*LtRtStanceBarTest' --tests '*ProfessionsGatherTest'
       - name: Test bundled Lua and add-on manifest
         if: ${{ !cancelled() }}
         env:
@@ -107,6 +112,8 @@ jobs:
           "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_kits.py
           "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_interact.py
           "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_native_menu_ownership.py
+          "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_ltrt_stancebar.py
+          "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_prof_gather.py
           python3 -B tools/test_performance_hud_horizontal.py
           # The old HUD-switch script expects Polestar windows; Ext's Questie retirement checks replace that assumption.
           for test in test_controller_situations test_chooser_grid test_realm_key test_roombar_mirror test_combat_top_flag test_pad_order test_map_stale_pend test_aura_container; do

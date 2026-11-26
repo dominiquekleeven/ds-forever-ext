@@ -6486,11 +6486,12 @@ object UiKit {
      * held by a finger (the game's pushed square).
      */
     fun professionButton(c: Canvas, r: RectF, icon: Bitmap?, name: String, inert: Boolean = false, chosen: Boolean = false,
-                         down: Boolean = false) {
+                         down: Boolean = false, on: Boolean = false) {
         val s = 88f
         val x = r.left + 8f; val y = r.centerY() - s / 2f
         framed(c, icon, x, y, s, dim = inert)
         val sq = RectF(x + 8f, y + 8f, x + s - 8f, y + s - 8f)
+        if (on && !inert) checkedGlow(c, sq, orHilite = true)
         if (down && !inert) tex("focus_frame")?.let { c.drawBitmap(it, null, sq, pBmp) }
         if (chosen && !inert) slotFocus(c, sq)
         val tx = x + s + 14f

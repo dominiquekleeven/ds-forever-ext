@@ -3,7 +3,7 @@
 Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an official upstream release.
 
 - Updated to upstream **1.0.38** (`7552e1f3`), with its Home editor, controller situations, sticky character settings, loading/input fixes, HTTPS downloads, and memory improvements. Fork-specific integration notes: [UPSTREAM_1_0_38_EXT.md](UPSTREAM_1_0_38_EXT.md).
-- This is **1.0.38-ext.8**, version code **1528**, signed with the existing Ext key. Install over an earlier Ext build; do not uninstall or clear data. Questie, simple waypoint navigation, GPU driver selections, and independent FPS measurements remain part of this fork. Polestar is not restored.
+- This is **1.0.38-ext.9**, version code **1529**, signed with the existing Ext key. Install over an earlier Ext build; do not uninstall or clear data. Questie, simple waypoint navigation, GPU driver selections, and independent FPS measurements remain part of this fork. Polestar is not restored.
 - On the first start after this update, the default changes to a **30 FPS game cap with Lossless frame generation enabled at 2×**, targeting 60 output FPS. It applies to existing Ext installs as well as new installs. The prior settings are retained privately for recovery. It applies to the next game launch, not by forcibly restarting a running game. Later manual changes persist across launches and future updates.
 - Supply your own licensed **Lossless.dll** if it is not already imported. The DLL is never bundled or downloaded. Without it, frame generation stays inactive and the game keeps the 30 FPS cap. A 60 FPS target is not a promise of measured output; the HUD continues to report actual measurements.
 - Upstream now applies extra low-memory graphics reductions on 12 GB models as well as 8 GB models, and Light 8 automatically on 8 GB devices. This can reduce spell/particle detail. It also enables a video-memory cap and native BC textures on detected Adreno devices. Physical-device results remain unverified for this merged release.
@@ -16,12 +16,21 @@ Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an 
 - Use Questie instead of the Polestar add-on. Questie supplies quest markers and objectives, not Polestar's step-by-step guide.
 - Questie 12.12.0 downloads from its official release during setup. Questie settings open on the game screen, not as a mirrored bottom-screen panel.
 - Ext.6 waits for Questie's initial download, repairs a missing Forever TOC, checks QuestieDB contract compatibility, and enables both add-ons each startup. A verified official DB fallback replaces failed cached checks. Failures say **Questie not ready** instead of implying success. Existing replaced add-ons and AddOns.txt receive recovery backups; SavedVariables remain unchanged.
-### Ext.8 native submenu input outside combat
+### Ext.9 selected upstream fixes and gathering
+
+- Home/map/cast/chat and host settings listeners hold their owners weakly. This addresses the selected view-retention paths, not every possible leak.
+- Disconnect/character-select traffic no longer falsely reports disabled add-ons. Sustained world traffic rearms the warning when add-ons really stop responding. Authentication policy is unchanged.
+- AH Sell shows refused items with reasons and bag counts. Scrollbars and controller-follow behavior improve navigation. Refused items cannot post; existing Buy Now and tooltip safeguards remain.
+- LT/RT wiring follows stance, action-bar, controller and possess changes, with safe combat deferral and cached-index invalidation.
+- Professions offers explicit gathering tracking on/off controls using actual game state. Dots appear on the native top-screen minimap, not our bottom map. Only one tracking tap can be pending.
+- Installer set 431 updates the bundled add-ons. Fully close WoW and relaunch through Ext. No logpolling, response-time, indoor, driver or native-renderer changes are included. Questie/TomTom, horizontal HUD, logout-only saves and user settings remain intact. No FPS/battery gain is claimed; Thor validation is still required.
+
+### Retained Ext.8 native submenu input outside combat
 
 - Outside combat, the bottom screen yields gamepad input while native Settings, AddOns, Help, or the Game Menu is open. Main-menu/submenu transitions and associated native confirmation popups retain ownership until all relevant windows close. Held buttons and sticks must return to rest before bottom-screen control resumes.
 - Existing bottom rooms, modal state, and queued guests stay intact. Ordinary mirrored map, character, chat, and NPC windows are not added to the native-menu block list.
 - This extension is explicitly out-of-combat only. Combat keeps the existing GameMenuFrame-only policy; arbitrary native submenu ownership during combat is not guaranteed. No insecure combat binding changes or game-protection bypasses are added.
-- Installer set 430 updates the bundled add-ons. Fully close WoW and relaunch through Ext. Physical-device behavior still needs verification. No additional upstream features are included in this update.
+- Physical-device behavior still needs verification. The Ext.8 submenu policy remains unchanged.
 
 ### Retained Ext.7 auction Buy Now and tooltip fixes
 

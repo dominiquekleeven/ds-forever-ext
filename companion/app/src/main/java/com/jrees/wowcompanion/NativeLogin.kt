@@ -124,6 +124,9 @@ object NativeLogin {
     private const val REARM_LIFE_MS = 300_000L
     /** the client run left the world (a logout, or its traffic stopped) and has not come back: a re-login file may be waiting */
     @Volatile var outOfWorld = false; private set
+    /** Diagnostics only: sustained world traffic ends the add-ons warning hold, not the login policy. Main thread. */
+    private val worldAgain = AddonSilence.WorldTraffic()
+    val outOfWorldHold: Boolean get() = outOfWorld && !worldAgain.back
     /**
      * this client run has been IN THE WORLD (the add-on's documents current: [worldSeen]); only then can leaving it write the re-login
      * file. NOT character select's traffic: measured 2026-10-09 10:30, the first character select (after the sign-in, before the world)
@@ -464,6 +467,7 @@ object NativeLogin {
         val fl = flavorDir ?: return
         val ctx = appCtx ?: return
         outOfWorld = true
+        worldAgain.reset() // Each departure starts the diagnostic traffic count afresh.
         val login = savedFor(ctx) ?: run { logEvent("out of the world ($why); ${if (browserMode) "browser login" else "no saved login"}, nothing written"); return }
         try {
             val f = File(fl, FILE)
@@ -567,6 +571,7 @@ object NativeLogin {
     /** the game's traffic stopping after the world (a disconnect: in the world it never drops under ~2 KB/s) writes the re-login file */
     private fun worldTraffic(rx: Long) {
         if (!pastLogin) return
+        if (outOfWorld) worldAgain.second(rx)
         if (rx < 200) {
             if (++quietFor == 5 && !quiet) { quiet = true; rearm("the world's traffic stopped") }
         }

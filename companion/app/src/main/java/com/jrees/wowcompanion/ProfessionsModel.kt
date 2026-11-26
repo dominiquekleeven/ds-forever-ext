@@ -42,7 +42,11 @@ object ProfessionsModel {
      * profession's spells as square buttons. [opens] = the one the secure open cell casts (it has a recipe window); every other
      * button is shown but INERT in the room (the user's "no spell casting" ruling: Fishing, Find Minerals).
      */
-    class Btn(val name: String, val icon: Int, val rec: Boolean, val opens: Boolean)
+    class Btn(val name: String, val icon: Int, val rec: Boolean, val opens: Boolean,
+              val trk: Int? = null, val ton: Int? = null, val toff: Int? = null) {
+        val tracking: Boolean get() = trk != null
+        val on: Boolean get() = trk == 1
+    }
 
     class Profession(val pos: Int, val id: Int, val name: String, val icon: Int, val rank: Int, val max: Int,
                      val mod: Int, val main: Boolean, val craft: Boolean,
@@ -141,7 +145,7 @@ object ProfessionsModel {
             o.optJSONArray("btn")?.let { b ->
                 for (k in 0 until b.length()) {
                     val x = b.optJSONObject(k) ?: continue
-                    btn.add(Btn(x.str("n") ?: "", x.optInt("icon"), x.optBoolean("rec"), x.optBoolean("o")))
+                    btn.add(Btn(x.str("n") ?: "", x.optInt("icon"), x.optBoolean("rec"), x.optBoolean("o"), x.int("trk"), x.int("ton"), x.int("toff")))
                 }
             }
             list.add(Profession(o.optInt("pos"), id, o.str("name") ?: "", o.optInt("icon"), o.optInt("rank"),
@@ -557,10 +561,20 @@ object ProfessionsModel {
         return if (ROW_OPEN in ov.padRows) Tap(ROW_OPEN, col) else null
     }
 
-    /**
-     * The game's own Professions button (the book cell): ONE click opens the game's window on its BOOK, the way that readies its
-     * tab bar (the fix for the game's TabIndicators error window). Only while the window is NOT shown: the game's button toggles.
-     */
+    /** One explicit tracking state per click. Null for missing, stale or already-satisfied cells. */
+    fun gatherTap(ov: Overview?, b: Btn?, want: Boolean): Tap? {
+        if (ov == null || b == null || !b.tracking || b.on == want) return null
+        val col = (if (want) b.ton else b.toff) ?: return null
+        return if (ROW_OPEN in ov.padRows) Tap(ROW_OPEN, col) else null
+    }
+
+    fun gatherLive(ov: Overview?, b: Btn?): Boolean =
+        ov != null && b != null && b.tracking && b.ton != null && b.toff != null && ROW_OPEN in ov.padRows
+
+    const val GATHER_NOTE = "Dots show on the top screen's minimap, not on our map."
+    const val GATHER_WHERE = "Settings > Top screen > Minimap: On or Tracking"
+
+    /** The game's own book button. Only while its window is not shown: the game's button toggles. */
     fun bookTap(ov: Overview?): Tap? {
         if (ov == null || ov.win || ov.open != null) return null
         val col = ov.bslot ?: return null
