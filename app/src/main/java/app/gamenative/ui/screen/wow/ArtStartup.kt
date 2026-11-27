@@ -10,6 +10,7 @@ import timber.log.Timber
 /** Wait for required art only; optional background work must not delay Play. */
 suspend fun awaitArtHarvest(context: Context, onStatus: (String) -> Unit): Boolean {
     val h = ArtHarvest
+    if (withContext(Dispatchers.IO) { h.canSkipHarvestAtPlay(context) }) return true
     onStatus("Preparing your game art...")
     val listener: (ArtHarvest.State) -> Unit = { st ->
         if (st is ArtHarvest.State.Running && st.beforePlay)

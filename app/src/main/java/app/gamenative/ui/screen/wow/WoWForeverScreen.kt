@@ -1501,7 +1501,6 @@ private fun installBundledComponents(context: Context, onStatus: (String) -> Uni
     }
 
     ImageFsInstaller.ensureBionicLib(context, ImageFs.find(context).rootDir)
-    ContentsManager(context).syncContents()
 }
 
 private fun installDriver(context: Context, driverName: String, assetZip: String, onStatus: (String) -> Unit) {

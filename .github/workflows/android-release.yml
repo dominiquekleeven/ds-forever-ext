@@ -57,7 +57,8 @@ jobs:
             --tests '*CrashStateLineTest' --tests '*WowCdnStreamTest' --tests '*HomeMapControlsShotsTest' \
             --tests '*FrameGen*Test' --tests '*FrameLimitTest' --tests '*PerformanceHudViewTest' \
             --tests '*QuestieMapMarkersTest' --tests '*WowPatchAnswerTest' --tests '*RendererFreezeLocksTest' \
-            --tests '*HomeViewsReleasedTest' --tests '*AhSellRefusedShotsTest' --tests '*ProfessionsGatherShotsTest'
+            --tests '*HomeViewsReleasedTest' --tests '*AhSellRefusedShotsTest' --tests '*ProfessionsGatherShotsTest' \
+            --tests '*ArtStartupTest'
       - name: Test Questie replacement and Ext update channel
         if: ${{ !cancelled() }}
         env:
@@ -90,7 +91,8 @@ jobs:
             --tests '*CdnHttpsTest' --tests '*InstallFixesTest' --tests '*MapHoldClaimTest' \
             --tests '*ResetPlanTest' --tests '*ResetFlowTest' --tests '*AuctionBuyCellTest' --tests '*AuctionTooltipTest' \
             --tests '*WeaklyTest' --tests '*HomeListenerWiringTest' --tests '*HomeEditWiringTest' \
-            --tests '*AhSellGridTest' --tests '*TrTest' --tests '*LtRtStanceBarTest' --tests '*ProfessionsGatherTest'
+            --tests '*AhSellGridTest' --tests '*TrTest' --tests '*LtRtStanceBarTest' --tests '*ProfessionsGatherTest' \
+            --tests '*ArtStopAtPlayTest' --tests '*PlayGateTest'
       - name: Test bundled Lua and add-on manifest
         if: ${{ !cancelled() }}
         env:

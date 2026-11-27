@@ -289,6 +289,12 @@ object ArtHarvest {
         !state.blocksPlay && GameFiles.activeBuild(GameFiles.gameRoot(ctx)) != null &&
             pending(ctx, beforePlay = true).isEmpty()
 
+    /** Play need not start an optional-only run. An existing worker still goes through letGoForPlay. */
+    fun canSkipHarvestAtPlay(ctx: Context): Boolean {
+        init(ctx)
+        return synchronized(waiters) { !rerun && !stopping && beforePlayReady(ctx) }
+    }
+
     // ---------------------------------------------------------------- ArtFingerprint: a step's source files, kept beside the stamp
     private fun fpFile(ctx: Context, s: Step) = File(root(ctx), ".fp/${s.id}.json")
     private fun fingerprintNow(g: GameFiles, fids: Collection<Int>, names: Collection<String>): String =
