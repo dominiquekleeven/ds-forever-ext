@@ -2496,7 +2496,7 @@ class CompanionHost(base: Context, private val shell: HostShell) : ContextWrappe
     }
 
     private fun syncGameMenuLock() {
-        if (::gameMenuLock.isInitialized) gameMenuLock.locked = padOwner.gmLock
+        if (::gameMenuLock.isInitialized) gameMenuLock.locked = padOwner.touchLocked
         if (padOwner.gmLock && !PadHub.gameMenuLocked) {
             DirectPad.nativeMenuOpened()
             talkReset("native game menu")

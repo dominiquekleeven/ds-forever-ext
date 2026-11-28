@@ -94,6 +94,9 @@ for n in names:
     L.execute(STUB)
     L.execute(chat.replace("local ADDON = ...", "local ADDON = 'WowCompanion'", 1))
     L.execute(src)
+    # Retain dormant mirror coverage; the native-AH acceptance test uses the shipping switch.
+    if (n.startswith('t_ah') and n != 't_ah_native.lua') or n in ('t_voice.lua', 't_fightwin.lua'):
+        L.execute('WowCompanion.interactWindows.auction = true')
     res = L.execute(open(os.path.join(HERE, n), encoding="utf-8").read())
     print(res)
     fails += str(res).count("FAIL ")

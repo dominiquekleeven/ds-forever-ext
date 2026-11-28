@@ -1160,8 +1160,12 @@ class WorldMapRoomView(context: Context) : View(context) {
         val p = placeOf(id)
         if (p == null || p.width() <= 0f) { jumpTo(id); placeCursorStart(); syncB(); invalidate(); return }    // no world over both
         hereTarget = id
-        if (!p.contains(ccx, ccy)) { val me = playerOn(p); ccx = me?.get(0) ?: p.centerX(); ccy = me?.get(1) ?: p.centerY() }
-        fly(1f / max(p.width(), p.height()), p.centerX(), p.centerY()) {
+        val marker = if (fromList) marksOf(id).firstOrNull { it.id == selQuest } else null
+        val x = marker?.let { p.left + it.x * p.width() } ?: p.centerX()
+        val y = marker?.let { p.top + it.y * p.height() } ?: p.centerY()
+        if (marker != null) { ccx = x; ccy = y }
+        else if (!p.contains(ccx, ccy)) { val me = playerOn(p); ccx = me?.get(0) ?: p.centerX(); ccy = me?.get(1) ?: p.centerY() }
+        fly(1f / max(p.width(), p.height()), x, y) {
             if (fromList && questMarks().any { it.first == selQuest }) select(selQuest) else updateHover(prefer = hoverQuest)
             syncB(); invalidate()
         }
@@ -1325,15 +1329,17 @@ class WorldMapRoomView(context: Context) : View(context) {
     }
     private val followRow = Runnable {
         if (region != MapRoomKeys.Region.LIST || selQuest == 0 || !isShown) return@Runnable
-        val e = logEntry(selQuest) ?: return@Runnable
+        followQuest(selQuest)
+    }
+    private fun followQuest(id: Int) {
+        val e = logEntry(id) ?: return
         val withMarks = HashMap<Int, List<Int>>()
-        for ((m, ms) in zoneQuests) withMarks[m] = ms.map { it.id }
-        if (playerMap != 0) mapDoc?.optJSONArray("quests")?.let { a ->
-            withMarks[playerMap] = (0 until a.length()).mapNotNull { a.optJSONObject(it)?.optInt("questID", 0)?.takeIf { q -> q != 0 } }
-        }
+        // Use the renderer's native-first/Questie fallback points, including their own map IDs.
+        for (m in zoneQuests.keys + questieMarks.keys + listOf(playerMap).filter { it != 0 })
+            withMarks[m] = marksOf(m).map { it.id }
         val names = model.maps.mapValues { it.value.name }
-        val where = MapQuestBook.whereIs(selQuest, e.optString("zone", ""), withMarks, names) { m -> isZoneView(m) }
-        if (where != null && where != shown) goTo(where, fromList = true)
+        val where = MapQuestBook.whereIs(id, e.optString("zone", ""), withMarks, names) { m -> isZoneView(m) }
+        if (where != null && (where != shown || marksOf(where).any { it.id == id })) goTo(where, fromList = true)
         invalidate()
     }
 

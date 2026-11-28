@@ -19,7 +19,7 @@ local KINDS = {
     { "gossip", "GOSSIP_SHOW", "GossipFrame" }, { "quest", "QUEST_DETAIL", "QuestFrame" }, { "merchant", "MERCHANT_SHOW", "MerchantFrame" },
     { "trainer", "TRAINER_SHOW", "ClassTrainerFrame" }, { "stable", "PET_STABLE_SHOW", "PetStableFrame" },
     { "petition", "PETITION_SHOW", "PetitionFrame" }, { "book", "ITEM_TEXT_BEGIN", "ItemTextFrame" }, { "mail", "MAIL_SHOW", "MailFrame" },
-    { "auction", "AUCTION_HOUSE_SHOW", "AuctionHouseFrame" }, { "taxi", "TAXIMAP_OPENED", "TaxiFrame" }, { "bank", "BANKFRAME_OPENED", "BankFrame" },
+    { "taxi", "TAXIMAP_OPENED", "TaxiFrame" }, { "bank", "BANKFRAME_OPENED", "BankFrame" },
     { "loot", "LOOT_OPENED", "LootFrame" },
 }
 local function capFor(slot)

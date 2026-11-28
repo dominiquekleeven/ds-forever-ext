@@ -3,7 +3,7 @@
 Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an official upstream release.
 
 - Updated to upstream **1.0.38** (`7552e1f3`), with its Home editor, controller situations, sticky character settings, loading/input fixes, HTTPS downloads, and memory improvements. Fork-specific integration notes: [UPSTREAM_1_0_38_EXT.md](UPSTREAM_1_0_38_EXT.md).
-- This is **1.0.38-ext.10**, version code **1530**, signed with the existing Ext key. Install over an earlier Ext build; do not uninstall or clear data. Questie, simple waypoint navigation, GPU driver selections, and independent FPS measurements remain part of this fork. Polestar is not restored.
+- This is **1.0.38-ext.11**, version code **1531**, signed with the existing Ext key. Install over an earlier Ext build; do not uninstall or clear data. Questie, simple waypoint navigation, GPU driver selections, and independent FPS measurements remain part of this fork. Polestar is not restored.
 - The existing one-time Ext migration uses a **30 FPS game cap with Lossless frame generation enabled at 2×**, targeting 60 output FPS. Ext.10 does not repeat that migration or reset later manual choices. The prior settings are retained privately for recovery. Settings apply to the next game launch, not by forcibly restarting a running game.
 - Supply your own licensed **Lossless.dll** if it is not already imported. The DLL is never bundled or downloaded. Without it, frame generation stays inactive and the game keeps the 30 FPS cap. A 60 FPS target is not a promise of measured output; the HUD continues to report actual measurements.
 - Upstream now applies extra low-memory graphics reductions on 12 GB models as well as 8 GB models, and Light 8 automatically on 8 GB devices. This can reduce spell/particle detail. It also enables a video-memory cap and native BC textures on detected Adreno devices. Physical-device results remain unverified for this merged release.
@@ -16,7 +16,18 @@ Community fork of [DS Forever](https://github.com/Jreese702/DS-Forever). Not an 
 - Use Questie instead of the Polestar add-on. Questie supplies quest markers and objectives, not Polestar's step-by-step guide.
 - Questie 12.12.0 downloads from its official release during setup. Questie settings open on the game screen, not as a mirrored bottom-screen panel.
 - Ext.6 waits for Questie's initial download, repairs a missing Forever TOC, checks QuestieDB contract compatibility, and enables both add-ons each startup. A verified official DB fallback replaces failed cached checks. Failures say **Questie not ready** instead of implying success. Existing replaced add-ons and AddOns.txt receive recovery backups; SavedVariables remain unchanged.
-### Ext.10 Play startup path
+### Ext.11 Blizzard native Auction House
+
+- The Auction House now stays in Blizzard's native UI on the game screen. The bottom-screen AH mirror is disabled. Other mirrored windows are unchanged.
+- Outside combat, the native AH suspends bottom-screen gamepad capture; its confirmation dialogs retain gamepad ownership. Bottom-screen touch stays usable. Settings/AddOns/Help/Game Menu retain their existing touch blocker when open. The previous bottom room resumes gamepad control after the native windows close. Combat keeps the existing GameMenuFrame-only isolation policy; no new combat binding hooks are added.
+- Native AH item/comparison tooltips remain visible while the AH is open, even with Hide game tooltips enabled. The saved setting is unchanged; hidden-buff protection stays active and ordinary tooltip hiding resumes when the AH closes.
+- The companion no longer opens Favorites searches or publishes AH controls on this route. No real auction transaction was used for testing. Installer set 432 updates the add-ons: close WoW completely and relaunch through Ext. Device acceptance is still needed.
+
+### Ext.11 large-map quest selection
+
+- The large bottom map's quest list now locates quests through the same native-first/Questie-fallback markers that it draws. Selecting a known marker centers the camera on that point, including another quest in the same zone, instead of the zone midpoint. Unknown locations retain the existing zone-name fallback. Questie/TomTom data and the Home minimap are unchanged; device acceptance is still needed.
+
+### Retained Ext.10 Play startup path
 
 - When the current game build's required art is already valid, Play reuses that result instead of starting an optional-only harvest and waiting for its game-archive open. Ordinary art/icon initialization still runs. Missing or stale required art, required failures, update stops and pending rebuilds retain the normal wait path.
 - An already-running art worker is not forgotten or forcibly interrupted. The existing Play hold, native-file release check and 20-second maximum wait remain unchanged. Optional background work remains available through its existing scheduling rules.

@@ -5,6 +5,36 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NativeMenuOwnershipTest {
+    @Test fun androidKeepsGamepadBlockedWithoutShowingTheTouchShield() {
+        val src = listOf(java.io.File("../companion/app/src/main/java/com/jrees/wowcompanion"),
+            java.io.File("companion/app/src/main/java/com/jrees/wowcompanion")).first { it.isDirectory }
+        val host = java.io.File(src, "CompanionHost.kt").readText()
+        assertTrue(host.contains("gameMenuLock.locked = padOwner.touchLocked"))
+        assertTrue(host.contains("PadHub.gameMenuLocked = padOwner.gmLock"))
+        assertTrue(host.contains("if (padOwner.gmLock || PadHub.inputBlocked) return"))
+        val pad = java.io.File(src, "PadInput.kt").readText()
+        assertTrue(pad.contains("if (menuGate.deliver(neutral())) each(f)"))
+    }
+
+    @Test fun auctionBlocksGamepadButAllowsBottomTouch() {
+        val owner = PadOwnerSync()
+        owner.note(JSONObject("""{"gmLock":true,"gmTouch":false,"routerMode":"room","routerLeave":{"row":"x","col":1}}"""))
+        assertTrue(owner.gmLock)
+        assertFalse(owner.touchLocked)
+        assertEquals(PadOwnerSync.Act.NONE, owner.step(true, 100L).act)
+        owner.noteGameMenu(JSONObject("""{"gmLock":true,"gmTouch":true}"""), current = false)
+        assertFalse(owner.touchLocked)
+        owner.noteGameMenu(JSONObject("""{"gmLock":true,"gmTouch":true}"""))
+        assertTrue(owner.touchLocked)
+        owner.noteGameMenu(JSONObject("""{"gmLock":true,"gmTouch":false}"""))
+        assertTrue(owner.gmLock)
+        assertFalse(owner.touchLocked)
+        owner.noteGameMenu(JSONObject("""{"gmLock":true}"""))
+        assertTrue("old menu messages retain touch safety", owner.touchLocked)
+        owner.noteGameMenu(JSONObject("""{"gmLock":false}"""))
+        assertFalse(owner.touchLocked)
+    }
+
     @Test fun cancellingHeldRadialsDoesNotPickOrCloseTheirModalState() {
         val doc = RadialModel.Doc(listOf(RadialModel.Item(0, 1, "Item", 1, 1, 0)),
             0, emptySet(), false, "radial", true, false)

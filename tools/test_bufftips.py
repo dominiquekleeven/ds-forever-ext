@@ -471,6 +471,21 @@ def scenario(code, mode, sealed, fails, label):
     G.FIGHT = False
     at(-100, -100); G.RUN(5)
 
+    # Native AH uses Blizzard's item/comparison tooltips even with the saved hide switch on.
+    L.execute('WowCompanion.nativeAuctionOpen = function() return AH_NATIVE == true end; AH_NATIVE = true; '
+              'ShoppingTooltip1 = CreateFrame("GameTooltip", "ShoppingTooltip1", UIParent); '
+              'ShoppingTooltip2 = CreateFrame("GameTooltip", "ShoppingTooltip2", UIParent); '
+              'WowCompanion.tips.hook(); game(function() GameTooltip:SetOwner(UIParent); '
+              'GameTooltip:Show(); ShoppingTooltip1:Show(); ShoppingTooltip2:Show(); GameTooltip:SetAlpha(0) end)')
+    T.zeroed[G.GameTooltip] = True
+    G.RUN(0.2)
+    chk("native AH restores a previously hidden item tooltip", G.GameTooltip.alpha == 1)
+    chk("native AH keeps both comparison tooltips visible", not T.holds(G.ShoppingTooltip1) and not T.holds(G.ShoppingTooltip2))
+    chk("native AH does not change the saved tooltip switch", G.WowCompanionDB.hideTips is True)
+    L.execute('AH_NATIVE = false'); G.RUN(0.2)
+    chk("AH close restores ordinary tooltip hiding", G.GameTooltip.alpha == 0 and T.holds(G.ShoppingTooltip1))
+    L.execute('game(function() GameTooltip:Hide(); ShoppingTooltip1:Hide(); ShoppingTooltip2:Hide() end)')
+
     # --- tooltips ON again: alpha and hover back
     T.set(False)
     at(-100, -100); L.execute("RESET(); GAIN()"); G.RUN(5)

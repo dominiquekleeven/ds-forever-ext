@@ -40,7 +40,7 @@ class FocusMenuTest(unittest.TestCase):
             padGrab={EnableGamePadButton=function(_,v) buttons=v end,EnableGamePadStick=function(_,v) sticks=v end,
                 SetPropagateKeyboardInput=function() end,Hide=function() hidden=true end,Show=function() hidden=false end}
             GameMenuFrame={IsShown=function() return shown end}
-            WC={nativeMenu={visible=function() return shown end}}
+            WC={nativeMenu={visible=function() return shown end},nativeAuctionOpen=function() return false end}
         """)
         function(lua, code, "function N.gameMenuSync()")
         for signature, name in (("local function padPress(", "padPress"), ("local function direct(", "direct"), ("local function onStick(", "onStick")):

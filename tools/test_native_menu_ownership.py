@@ -197,6 +197,38 @@ check(not w.eval('__IN.N.gmLock'), 'lazy root close releases')
 clean(w, 'lazy loading')
 
 w = world()
+w.execute('mkwin("AuctionHouseFrame", false); fire("ADDON_LOADED", "Blizzard_AuctionHouseUI"); '
+          'hwTap("qact", 10); advance(0.4); AuctionHouseFrame:Show(); fire("AUCTION_HOUSE_SHOW"); advance(0.3)')
+check(w.eval('__IN.N.gmLock') is True, 'native AH suspends bottom capture')
+check(w.eval('WowCompanion.nativeMenu.touchLocked()') is False, 'native AH leaves bottom touch enabled')
+check(any(d.get('gmLock') and d.get('gmTouch') is False for d in docs(w, 0, 'interact')),
+      'native AH document separates gamepad and touch ownership')
+check(w.eval('WowCompanionFaceRouter:GetAttribute("wc-menu")') is True, 'native AH yields the secure bottom router')
+check(w.eval('AuctionHouseFrame:GetAlpha()') == 1, 'native AH stays visible')
+check(w.eval('WowCompanion.nativeAuctionOpen()') is True, 'native AH allows its item tooltips')
+before = len(docs(w, 0, 'guestpad'))
+w.execute('hwPress("PADDDOWN", false, false); advance(0.2)')
+check(len(docs(w, 0, 'guestpad')) == before, 'native AH pad does not reach the suspended bottom room')
+w.execute('StaticPopup1:Show(); AuctionHouseFrame:Hide(); fire("AUCTION_HOUSE_CLOSED"); advance(0.2)')
+check(w.eval('__IN.N.gmLock') is True, 'native AH confirmation retains ownership')
+check(w.eval('WowCompanion.nativeMenu.touchLocked()') is False, 'AH confirmation still permits bottom touch')
+check(w.eval('WowCompanion.nativeAuctionOpen()') is False, 'native tooltip exemption ends when AH closes')
+w.execute('StaticPopup1:Hide(); advance(0.3)')
+check(not w.eval('__IN.N.gmLock'), 'native AH final close restores bottom ownership')
+check(w.eval('WowCompanion.capture.state().holder') == 'pad:map', 'native AH preserves the existing bottom room')
+clean(w, 'native AH')
+
+w = world()
+w.execute('mkwin("AuctionHouseFrame", false); fire("ADDON_LOADED", "Blizzard_AuctionHouseUI"); '
+          'AuctionHouseFrame:Show(); SettingsPanel:Show(); advance(0.2)')
+check(w.eval('WowCompanion.nativeMenu.touchLocked()') is True, 'Settings over AH retains its existing touch blocker')
+w.execute('SettingsPanel:Hide(); advance(0.2)')
+check(w.eval('__IN.N.gmLock') is True and w.eval('WowCompanion.nativeMenu.touchLocked()') is False,
+      'closing Settings restores AH gamepad-only ownership')
+w.execute('AuctionHouseFrame:Hide(); advance(0.2)')
+clean(w, 'AH and Settings overlap')
+
+w = world()
 w.execute('WorldMapFrame:Show(); StaticPopup1:Show(); advance(0.2)')
 check(not w.eval('__IN.N.gmLock'), 'mirrored map and unrelated popup do not claim native menu ownership')
 w.execute('StaticPopup1:Hide(); WorldMapFrame:Hide(); advance(0.2); hwTap("qact", 10); advance(0.4)')

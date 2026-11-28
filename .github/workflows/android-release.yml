@@ -114,6 +114,7 @@ jobs:
           "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_kits.py
           "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_interact.py
           "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_native_menu_ownership.py
+          "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_bufftips.py
           "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_ltrt_stancebar.py
           "$RUNNER_TEMP/lua-tests/bin/python" -B tools/test_prof_gather.py
           python3 -B tools/test_performance_hud_horizontal.py

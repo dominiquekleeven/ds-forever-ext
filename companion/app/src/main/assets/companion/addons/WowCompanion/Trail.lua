@@ -5548,16 +5548,25 @@ do
         end
         return false
     end
-    -- held now: the tooltips setting, or (tt5) a tooltip of the hidden game buffs
+    function T.nativeAuctionTip(fr)
+        if type(fr) ~= "table" then return false end
+        return type(WC.nativeAuctionOpen) == "function" and WC.nativeAuctionOpen()
+            and (rawequal(fr, _G.GameTooltip) or rawequal(fr, _G.ShoppingTooltip1) or rawequal(fr, _G.ShoppingTooltip2))
+    end
+    -- Native AH item/comparison tooltips stay usable without changing the saved switch.
     function T.holds(fr)
-        if T.on then return true end
         local ok, r = pcall(T.buffTip, fr)
-        return ok and r == true
+        if ok and r == true then return true end
+        return T.on and not T.nativeAuctionTip(fr)
     end
     -- the hold itself: alpha 0, nothing else. `why` counts a catch (the tooltip was drawn above 0 when the hold came)
     local function zero(fr, why)
         if T.busy then return end
         if not T.holds(fr) then
+            if T.nativeAuctionTip(fr) and T.zeroed[fr] then
+                T.zeroed[fr] = nil
+                T.busy = true; pcall(fr.SetAlpha, fr, 1); T.busy = false
+            end
             -- tt5: a frame held for the hidden buffs gets its alpha back at its next show once they are shown (tooltips on)
             if T.buffHeld and T.buffHeld[fr] and not T.on then
                 T.buffHeld[fr] = nil

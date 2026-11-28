@@ -35,6 +35,9 @@ class PadOwnerSync {
     /** the game menu was open at the pull and still shows: the game has the pad, the bottom screen is locked */
     var gmLock = false
         private set
+    private var gmTouch = true
+    /** AH keeps the gamepad, but does not block bottom-screen touch. Old senders keep the safe lock. */
+    val touchLocked: Boolean get() = gmLock && gmTouch
     /** the fight began in the game menu (Interact i148's doc.gmFight): it stays the game's to its end, the menu shown or not - PadMap
      *  stepped aside at the pull, so an ENTER would only make every press act in the app AND in the game (review of 2026-11-11) */
     var gmFight = false
@@ -78,6 +81,7 @@ class PadOwnerSync {
         enterCell = cellOf(msg.optJSONObject("fightEnter")) ?: cellOf(msg.optJSONObject("enter"))
         leaveCell = cellOf(msg.optJSONObject("fightLeave"))
         gmLock = msg.optBoolean("gmLock", false)
+        gmTouch = msg.optBoolean("gmTouch", true)
         gmFight = msg.optBoolean("gmFight", false)
         holder = msg.optString("holder", "").ifEmpty { null }
         npcLeft = msg.optBoolean("npcLeft", false)
@@ -92,7 +96,10 @@ class PadOwnerSync {
 
     /** Same native-menu state, from Spells' immediate show/hide document. */
     fun noteGameMenu(msg: JSONObject, current: Boolean = true) {
-        if (current && msg.has("gmLock")) gmLock = msg.optBoolean("gmLock")
+        if (current && msg.has("gmLock")) {
+            gmLock = msg.optBoolean("gmLock")
+            gmTouch = msg.optBoolean("gmTouch", true)
+        }
     }
 
     /**

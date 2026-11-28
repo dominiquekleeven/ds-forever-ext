@@ -1364,6 +1364,7 @@ local function gameMenuRow()
         local d = { type = "gamemenu", v = GMV, why = why, mode = SN(function() return C_GameRules.GetActiveGameMode() end),
                     gmLock = WC.nativeMenu and WC.nativeMenu.locked() or
                         (not WC.nativeMenu and S(function() return GameMenuFrame:IsShown() end) == true),
+                    gmTouch = not WC.nativeMenu or not WC.nativeMenu.touchLocked or WC.nativeMenu.touchLocked(),
                     kiosk = kiosk or nil, items = list, cells = COL, binds = bindList(), micro = rectOf(_G.MainMenuMicroButton),
                     fight = (S(function() return InCombatLockdown() end) == true) or nil }
         for k, v in pairs(extra or {}) do d[k] = v end
